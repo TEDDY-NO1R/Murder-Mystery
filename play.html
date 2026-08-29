@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f0a04">
+<meta name="robots" content="noindex, nofollow">
+<title>Murder Mystery</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,700;1,500&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/game.css">
+</head>
+<body>
+
+<!-- Screens are all present in the DOM; game.js shows exactly one.
+     Nothing here contains story text — every word a player reads is
+     fetched from Firestore against their own auth token. -->
+
+<div id="app" hidden>
+
+  <!-- ── 1. JOIN ──────────────────────────────────────────── -->
+  <section class="screen" data-screen="join">
+    <div class="wrap narrow">
+      <p class="eyebrow">An evening of</p>
+      <h1 class="display">Murder<br>Mystery</h1>
+      <hr class="rule">
+
+      <form id="join-form" autocomplete="off">
+        <label for="code">Room code</label>
+        <input id="code" name="code" class="code-input" type="text"
+               inputmode="latin" autocapitalize="characters" autocorrect="off"
+               spellcheck="false" maxlength="5" placeholder="•••••" required>
+
+        <label for="name">Your name</label>
+        <input id="name" name="name" type="text" maxlength="24"
+               placeholder="How you're known tonight" required>
+
+        <button type="submit" class="btn primary" id="join-btn">Enter</button>
+        <p class="error" id="join-error" role="alert" hidden></p>
+      </form>
+    </div>
+  </section>
+
+  <!-- ── 2. LOBBY ─────────────────────────────────────────── -->
+  <section class="screen" data-screen="lobby">
+    <div class="wrap narrow">
+      <p class="eyebrow">Room <span id="lobby-code" class="code-chip"></span></p>
+      <h2 class="display sm" id="lobby-title">Gathering</h2>
+      <p class="lede" id="lobby-synopsis"></p>
+      <hr class="rule">
+
+      <p class="eyebrow">Present <span id="lobby-count" class="dim"></span></p>
+      <ul class="guest-list" id="lobby-players"></ul>
+
+      <p class="waiting"><span class="pulse"></span> Waiting for the host to begin</p>
+    </div>
+  </section>
+
+  <!-- ── 3. ENVELOPE ──────────────────────────────────────── -->
+  <section class="screen" data-screen="envelope">
+    <div class="wrap narrow center">
+      <p class="eyebrow">Delivered to</p>
+      <h2 class="display sm" id="envelope-name">You</h2>
+
+      <button class="envelope" id="envelope" aria-label="Open your envelope">
+        <div class="envelope-body">
+          <div class="envelope-back"></div>
+          <div class="envelope-letter"></div>
+          <div class="envelope-front"></div>
+          <div class="envelope-flap"></div>
+          <div class="wax-seal" aria-hidden="true">M</div>
+        </div>
+      </button>
+
+      <p class="hint" id="envelope-hint">Tap to break the seal</p>
+      <p class="hint quiet">Keep this screen to yourself.</p>
+    </div>
+  </section>
+
+  <!-- ── 4. CHARACTER CARD ────────────────────────────────── -->
+  <section class="screen" data-screen="card">
+    <div class="wrap">
+      <article class="parchment" id="card-parchment">
+        <p class="eyebrow" id="card-role"></p>
+        <h2 class="display sm" id="card-name"></h2>
+        <p class="card-title" id="card-title"></p>
+        <hr class="rule thin">
+        <div id="card-fields"></div>
+      </article>
+      <button class="btn primary" id="card-done">I've read it</button>
+    </div>
+  </section>
+
+  <!-- ── 5. GAME ──────────────────────────────────────────── -->
+  <section class="screen" data-screen="game">
+    <header class="bar">
+      <div>
+        <p class="eyebrow" id="game-phase">Investigation</p>
+        <p class="bar-sub" id="game-blurb"></p>
+      </div>
+      <button class="chip" id="game-whoami"></button>
+    </header>
+
+    <nav class="tabs" role="tablist">
+      <button class="tab is-on" data-tab="clues" role="tab">Clues <span class="badge" id="clue-count">0</span></button>
+      <button class="tab" data-tab="you" role="tab">Your card</button>
+      <button class="tab" data-tab="notes" role="tab">Notes</button>
+    </nav>
+
+    <div class="wrap">
+      <div class="tab-panel is-on" data-panel="clues">
+        <ul class="clue-feed" id="clue-feed"></ul>
+        <p class="waiting" id="clue-empty"><span class="pulse"></span> No clues released yet</p>
+      </div>
+
+      <div class="tab-panel" data-panel="you">
+        <article class="parchment" id="game-card"></article>
+      </div>
+
+      <div class="tab-panel" data-panel="notes">
+        <p class="hint quiet">Kept on this phone only. Never sent anywhere.</p>
+        <textarea id="notepad" placeholder="Who was where. Who hesitated."></textarea>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 6. VOTE ──────────────────────────────────────────── -->
+  <section class="screen" data-screen="vote">
+    <div class="wrap narrow">
+      <p class="eyebrow">Accusation</p>
+      <h2 class="display sm">Name the killer</h2>
+      <p class="lede" id="vote-lede">Choose the person you believe did it.</p>
+      <hr class="rule">
+
+      <ul class="ballot" id="ballot"></ul>
+      <button class="btn primary" id="vote-btn" disabled>Cast accusation</button>
+      <p class="hint" id="vote-status"></p>
+    </div>
+  </section>
+
+  <!-- ── 7. REVEAL ────────────────────────────────────────── -->
+  <section class="screen" data-screen="reveal">
+    <div class="wrap narrow">
+      <p class="eyebrow">The truth</p>
+      <h2 class="display sm" id="reveal-verdict">…</h2>
+      <hr class="rule">
+
+      <article class="parchment" id="reveal-body"></article>
+
+      <p class="eyebrow">The table</p>
+      <ul class="cast-list" id="reveal-cast"></ul>
+    </div>
+  </section>
+
+</div>
+
+<!-- Shown until auth settles, and whenever a listener dies -->
+<div id="boot" class="screen is-on">
+  <div class="wrap narrow center">
+    <p class="waiting"><span class="pulse"></span> <span id="boot-msg">Lighting the lamps</span></p>
+  </div>
+</div>
+
+<script type="module" src="js/game.js"></script>
+</body>
+</html>

@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0f0a04">
+<meta name="robots" content="noindex, nofollow">
+<title>Stories — Murder Mystery</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,700;1,500&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/admin.css">
+</head>
+<body>
+
+<header class="topbar">
+  <h1>Story editor</h1>
+  <span class="dim small" id="who"></span>
+  <span class="spacer"></span>
+  <a class="btn ghost sm" href="../host.html">Host a game</a>
+  <button class="btn ghost sm" id="signout">Sign out</button>
+</header>
+
+<div class="shell">
+  <div class="cols">
+
+    <!-- Story list -->
+    <div>
+      <div class="panel">
+        <p class="panel-title">Stories <span class="count" id="story-count"></span></p>
+        <ul class="roster" id="story-list"></ul>
+        <p class="empty" id="story-empty">No stories yet.</p>
+        <hr class="rule">
+        <button class="btn block" id="new-btn">New story</button>
+      </div>
+    </div>
+
+    <!-- Editor -->
+    <div id="editor" hidden>
+
+      <!-- Legacy shape warning -->
+      <div class="panel" id="legacy" hidden style="border-color:rgba(139,26,26,.5)">
+        <p class="panel-title" style="color:#d4736f">Insecure shape</p>
+        <p class="small">
+          This story keeps its characters in an <strong>array inside the story
+          document</strong>. Firestore returns whole documents or nothing, so no
+          security rule can show the title while hiding the secrets in the same
+          document. Converting moves each character into the
+          <code>characters</code> subcollection, where they can be locked
+          individually.
+        </p>
+        <div class="btn-row" style="margin-top:1rem">
+          <button class="btn danger" id="convert-btn">Convert to subcollection</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <p class="panel-title">
+          <span id="editing-id" class="mono"></span>
+          <button class="btn ghost sm" id="delete-story">Delete story</button>
+        </p>
+
+        <ul class="phases" id="tabs">
+          <li data-tab="details" class="now">Details</li>
+          <li data-tab="characters">Characters</li>
+          <li data-tab="clues">Clues</li>
+        </ul>
+
+        <!-- ── Details ── -->
+        <section data-panel="details">
+          <label for="f-title">Title</label>
+          <input id="f-title">
+
+          <label for="f-synopsis">Synopsis <span class="dim">— players see this</span></label>
+          <textarea id="f-synopsis"></textarea>
+
+          <label for="f-setting">Setting</label>
+          <input id="f-setting">
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 1rem">
+            <div><label for="f-min">Min players</label><input id="f-min" type="number" min="3" max="8"></div>
+            <div><label for="f-max">Max players</label><input id="f-max" type="number" min="3" max="8"></div>
+            <div><label for="f-difficulty">Difficulty</label>
+              <select id="f-difficulty">
+                <option>Easy</option><option>Medium</option><option>Hard</option>
+              </select>
+            </div>
+            <div><label for="f-time">Estimated time</label><input id="f-time" placeholder="90 minutes"></div>
+          </div>
+
+          <label for="f-source">Source / attribution</label>
+          <input id="f-source">
+
+          <label for="f-status">Status</label>
+          <select id="f-status"><option>draft</option><option>published</option></select>
+
+          <hr class="rule">
+          <p class="panel-title">Solution</p>
+
+          <label for="f-killer">Killer <span class="dim">— must be the character whose role is KILLER</span></label>
+          <select id="f-killer"></select>
+
+          <label for="f-headline">Headline</label>
+          <input id="f-headline">
+          <label for="f-method">Method</label>
+          <textarea id="f-method"></textarea>
+          <label for="f-motive">Motive</label>
+          <textarea id="f-motive"></textarea>
+          <label for="f-epilogue">Epilogue</label>
+          <textarea id="f-epilogue"></textarea>
+
+          <div class="btn-row" style="margin-top:1.5rem">
+            <button class="btn primary" id="save-details">Save details</button>
+          </div>
+        </section>
+
+        <!-- ── Characters ── -->
+        <section data-panel="characters" hidden>
+          <p class="small dim" style="margin-top:0">
+            Each character becomes one document under
+            <code>characters/</code>, readable only by you and by the host
+            browser that deals it.
+          </p>
+
+          <ul class="roster" id="char-list"></ul>
+          <p class="empty" id="char-empty">No characters yet.</p>
+
+          <div class="btn-row" style="margin:1rem 0">
+            <button class="btn sm" id="new-char">Add character</button>
+            <span class="small dim" id="cast-check"></span>
+          </div>
+
+          <div id="char-form" hidden>
+            <hr class="rule">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 1rem">
+              <div><label for="c-id">Id <span class="dim">— document name</span></label><input id="c-id"></div>
+              <div><label for="c-order">Deal order</label><input id="c-order" type="number" min="1"></div>
+            </div>
+
+            <label for="c-role">Role</label>
+            <select id="c-role"></select>
+
+            <label for="c-name">Character name</label>
+            <input id="c-name">
+
+            <label for="c-title">Flavour title</label>
+            <input id="c-title" placeholder="The Stepfather">
+
+            <label for="c-bio">Bio</label>
+            <textarea id="c-bio"></textarea>
+
+            <label for="c-secret">Secret</label>
+            <textarea id="c-secret"></textarea>
+
+            <label for="c-objective">Objective</label>
+            <textarea id="c-objective"></textarea>
+
+            <div id="wrap-coverStory" hidden>
+              <label for="c-coverStory">Cover story <span class="dim">— killer only</span></label>
+              <textarea id="c-coverStory"></textarea>
+            </div>
+
+            <div id="wrap-clueConnections" hidden>
+              <label for="c-clueConnections">Clue connections <span class="dim">— detective only, one per line</span></label>
+              <textarea id="c-clueConnections" style="min-height:9rem"></textarea>
+            </div>
+
+            <div id="wrap-protectObjective" hidden>
+              <label for="c-protectObjective">What to protect <span class="dim">— accomplice only</span></label>
+              <textarea id="c-protectObjective"></textarea>
+            </div>
+
+            <div class="btn-row" style="margin-top:1.5rem">
+              <button class="btn primary" id="save-char">Save character</button>
+              <button class="btn ghost" id="cancel-char">Cancel</button>
+              <button class="btn danger" id="delete-char">Delete</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ── Clues ── -->
+        <section data-panel="clues" hidden>
+          <p class="small dim" style="margin-top:0">
+            Clue text lives here and is copied into a session only at the moment
+            the host releases it.
+          </p>
+          <div id="clue-editor"></div>
+          <div class="btn-row" style="margin-top:1.5rem">
+            <button class="btn primary" id="save-clues">Save clues</button>
+          </div>
+        </section>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="boot" class="shell"><p class="dim">Loading…</p></div>
+
+<script type="module" src="../js/admin.js"></script>
+</body>
+</html>

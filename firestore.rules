@@ -1,0 +1,250 @@
+rules_version = '2';
+
+// ============================================================
+//  MURDER MYSTERY — Firestore Security Rules
+// ============================================================
+//
+//  Project: murder-mystery-online
+//  Host UID is already filled in (hasthimunisilva@icloud.com).
+//
+//  Safe to publish before seeding. The entire stories tree is
+//  admin-only, so the legacy characters array still sitting in
+//  the old documents is unreadable to players either way.
+//
+//  The single guarantee these rules exist to make:
+//  a player's phone can download exactly one character document —
+//  its own. Every other character, every unreleased clue, and the
+//  solution itself are refused by Google's servers, not hidden by
+//  the interface.
+// ============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------------------------------------------------
+    //  Identity helpers
+    // ---------------------------------------------------------
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Players sign in anonymously. Anonymous == untrusted, always.
+    function isAnonymous() {
+      return isSignedIn()
+          && request.auth.token.firebase.sign_in_provider == 'anonymous';
+    }
+
+    // The host / story editor. Two independent conditions, on purpose:
+    // the UID allowlist is the real gate, and the anonymous check is a
+    // second lock in case a sign-in provider is ever added carelessly.
+    // Add more UIDs to the list to allow more hosts.
+    function isAdmin() {
+      return isSignedIn()
+          && !isAnonymous()
+          && request.auth.uid in [
+               'B8CkPp6XqTcHfvOcZHE8ghqNahI3'  // hasthimunisilva@icloud.com
+             ];
+    }
+
+    function isSelf(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // ---------------------------------------------------------
+    //  Session helpers
+    // ---------------------------------------------------------
+
+    // Has this user actually joined this session?
+    function isMember(sid) {
+      return isSignedIn()
+          && exists(/databases/$(database)/documents/sessions/$(sid)/players/$(request.auth.uid));
+    }
+
+    // Read the live phase off the session doc. This is what makes
+    // "you cannot fetch the answer before the reveal" a database
+    // fact rather than a UI promise.
+    function phaseIs(sid, p) {
+      return get(/databases/$(database)/documents/sessions/$(sid)).data.currentPhase == p;
+    }
+
+    // =========================================================
+    //  STORIES — admin-only, the entire tree
+    //
+    //  Players never read anything under /stories. Not the
+    //  metadata, not the characters, not the clues. The host
+    //  copies the few public bits a player needs (story title,
+    //  synopsis) into the session document, and deals each
+    //  player's character into their own private document.
+    //
+    //  This is deliberately blunter than it needs to be. A
+    //  narrower rule would have to let players read the story
+    //  document for its title — and Firestore returns whole
+    //  documents or nothing, so one careless field on that
+    //  document would leak. Closing the tree removes the
+    //  possibility rather than managing it.
+    // =========================================================
+
+    match /stories/{storyId} {
+
+      allow read, write: if isAdmin();
+
+      // ---- SECRET: names, roles, bios, secrets, objectives,
+      //      cover stories, clue connections. -------------------
+      match /characters/{characterId} {
+        allow read, write: if isAdmin();
+      }
+
+      // ---- SECRET: the clue text for every phase, including
+      //      clues the host has not released yet. ---------------
+      match /phases/{phaseId} {
+        allow read, write: if isAdmin();
+      }
+    }
+
+    // =========================================================
+    //  SESSIONS
+    //
+    //  The document ID *is* the room code (e.g. sessions/RAVEN).
+    //  That means joining is a direct lookup, so players never
+    //  need permission to query the sessions collection — and
+    //  `list` stays admin-only, which blocks enumeration of
+    //  other people's games entirely.
+    // =========================================================
+
+    match /sessions/{sessionId} {
+
+      // Anyone signed in can look up a room code they were told.
+      // Contains: roomCode, storyId, storyTitle, storySynopsis,
+      // status, currentPhase, revealedClues[], hostUid, createdAt.
+      //
+      // revealedClues holds the full text of clues the host has
+      // already released — released clues are public to the table
+      // by definition. Unreleased ones stay in /stories, which
+      // players cannot read. No character, role or solution data
+      // ever goes in this document.
+      allow get: if isSignedIn();
+
+      allow list: if isAdmin();
+
+      // Only the host creates sessions, advances phases, and
+      // releases clues. A player cannot skip a phase, release a
+      // clue early, or end the game.
+      allow create, update, delete: if isAdmin();
+
+      // -------------------------------------------------------
+      //  players/{uid} — public within the game
+      //
+      //  The lobby list and the ballot are built from these, so
+      //  every player can read them. They hold no secrets: a
+      //  display name, a join time, and (once dealt) the public
+      //  in-fiction character name. Role, secret and objective
+      //  live in /private, never here.
+      // -------------------------------------------------------
+      match /players/{playerId} {
+
+        function validNewPlayer() {
+          return request.resource.data.keys().hasOnly(['name', 'joinedAt'])
+              && request.resource.data.name is string
+              && request.resource.data.name.size() >= 1
+              && request.resource.data.name.size() <= 24
+              // Forces serverTimestamp() — a client cannot backdate
+              // itself to the front of the join queue.
+              && request.resource.data.joinedAt == request.time;
+        }
+
+        // A player may rename themselves and nothing else. In
+        // particular they cannot award themselves a characterName.
+        function validPlayerUpdate() {
+          return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name'])
+              && request.resource.data.name is string
+              && request.resource.data.name.size() >= 1
+              && request.resource.data.name.size() <= 24;
+        }
+
+        allow read: if isSignedIn();
+        allow create: if isSelf(playerId) && validNewPlayer();
+        allow update: if (isSelf(playerId) && validPlayerUpdate()) || isAdmin();
+        allow delete: if isAdmin();
+      }
+
+      // -------------------------------------------------------
+      //  private/{uid} — THE LOAD-BEARING RULE
+      //
+      //  At game start the host deals the characters and writes
+      //  each player's card here, keyed by that player's auth UID.
+      //  `get` is gated on the requester being that exact user.
+      //
+      //  A phone asking for another player's document is refused
+      //  by Firestore before any story text leaves Google. Opening
+      //  DevTools does not help: the response is a permission
+      //  error, not filtered data.
+      //
+      //  `list` is admin-only — without that, a player could pull
+      //  the whole collection in one query and read every card.
+      //
+      //  Writes are admin-only too, so nobody can re-deal
+      //  themselves out of being the killer.
+      // -------------------------------------------------------
+      match /private/{playerId} {
+        allow get: if isSelf(playerId) || isAdmin();
+        allow list: if isAdmin();
+        allow create, update, delete: if isAdmin();
+      }
+
+      // -------------------------------------------------------
+      //  votes/{uid}
+      //
+      //  Secret ballot. You see your own vote; you see everyone's
+      //  only once the host reaches the reveal. Votes can only be
+      //  cast during the accusation phase, by a player who is
+      //  actually in the game, for themselves.
+      // -------------------------------------------------------
+      match /votes/{playerId} {
+
+        function validVote() {
+          return request.resource.data.keys().hasOnly(['suspectId', 'castAt'])
+              && request.resource.data.suspectId is string
+              && request.resource.data.suspectId.size() <= 128;
+        }
+
+        allow get: if isSelf(playerId)
+                   || isAdmin()
+                   || (isMember(sessionId) && phaseIs(sessionId, 'reveal'));
+
+        allow list: if isAdmin()
+                    || (isMember(sessionId) && phaseIs(sessionId, 'reveal'));
+
+        allow create, update: if isSelf(playerId)
+                              && isMember(sessionId)
+                              && phaseIs(sessionId, 'accusation')
+                              && validVote();
+
+        allow delete: if isAdmin();
+      }
+
+      // -------------------------------------------------------
+      //  reveal/{docId}
+      //
+      //  Who did it, how, and why. The host writes this at game
+      //  start, but the read is gated on the session's live phase,
+      //  so the answer is genuinely unfetchable until the host
+      //  advances to 'reveal'. Not hidden — unfetchable.
+      // -------------------------------------------------------
+      match /reveal/{docId} {
+        allow read: if isAdmin()
+                    || (isMember(sessionId) && phaseIs(sessionId, 'reveal'));
+        allow write: if isAdmin();
+      }
+    }
+
+    // =========================================================
+    //  Everything else: denied.
+    //  Firestore denies unmatched paths by default; this is here
+    //  so the intent is explicit to anyone reading the file.
+    // =========================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

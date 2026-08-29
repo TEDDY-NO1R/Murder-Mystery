@@ -1,0 +1,425 @@
+/* ============================================================
+   MURDER MYSTERY — player client
+   Dark Victorian gothic. Mobile-first; a phone held in a dim room.
+   ============================================================ */
+
+:root {
+  --bg:        #0f0a04;
+  --parchment: #f5e9c9;
+  --blood:     #8b1a1a;
+  --gold:      #c8a84b;
+  --smoke:     #6b6355;
+
+  --ink:       #2b2016;   /* text ON parchment */
+  --bg-raised: #17100a;
+  --hairline:  rgba(200, 168, 75, .22);
+
+  --serif:   'Crimson Text', Georgia, 'Times New Roman', serif;
+  --display: 'Playfair Display', Georgia, serif;
+
+  --pad: 1.375rem;
+  --radius: 3px;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  min-height: 100svh;
+  background: var(--bg);
+  /* Faint vignette so the page feels lit by one lamp, not a screen */
+  background-image:
+    radial-gradient(ellipse 120% 70% at 50% -10%, rgba(200,168,75,.07), transparent 60%),
+    radial-gradient(ellipse 90% 60% at 50% 110%, rgba(139,26,26,.08), transparent 60%);
+  background-attachment: fixed;
+  color: var(--parchment);
+  font: 400 1.0625rem/1.65 var(--serif);
+  overflow-wrap: break-word;
+}
+
+/* ── Screens ─────────────────────────────────────────────── */
+
+.screen { display: none; }
+.screen.is-on { display: block; animation: fade .45s ease both; }
+@keyframes fade { from { opacity: 0; transform: translateY(6px); } }
+
+.wrap { padding: 2rem var(--pad) 3.5rem; max-width: 34rem; margin: 0 auto; }
+.wrap.narrow { max-width: 26rem; }
+.center { text-align: center; }
+
+/* ── Type ────────────────────────────────────────────────── */
+
+.display {
+  font: 700 clamp(2.5rem, 13vw, 3.5rem)/1.02 var(--display);
+  margin: .25rem 0 .75rem;
+  letter-spacing: -.01em;
+  color: var(--parchment);
+}
+.display.sm { font-size: clamp(1.75rem, 7.5vw, 2.25rem); line-height: 1.15; }
+
+.eyebrow {
+  font-family: var(--serif);
+  font-size: .8125rem;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin: 0 0 .25rem;
+}
+
+.lede { color: #cdbf9e; font-size: 1.0625rem; margin: .5rem 0 0; font-style: italic; }
+.dim  { color: var(--smoke); }
+.hint { color: var(--smoke); font-size: .875rem; margin: 1rem 0 0; }
+.hint.quiet { font-size: .8125rem; opacity: .75; }
+.error { color: #d4736f; font-size: .9375rem; margin: .875rem 0 0; }
+
+.rule {
+  border: 0; height: 1px; margin: 1.5rem 0;
+  background: linear-gradient(90deg, transparent, var(--hairline) 15%, var(--hairline) 85%, transparent);
+}
+.rule.thin { margin: 1rem 0; }
+
+/* ── Form ────────────────────────────────────────────────── */
+
+label {
+  display: block;
+  font-size: .8125rem;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--smoke);
+  margin: 1.5rem 0 .5rem;
+}
+
+input, textarea {
+  width: 100%;
+  padding: .875rem 1rem;
+  background: rgba(245, 233, 201, .045);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  color: var(--parchment);
+  font: 400 1.0625rem/1.5 var(--serif);
+}
+input::placeholder, textarea::placeholder { color: rgba(107, 99, 85, .8); }
+input:focus, textarea:focus {
+  outline: none;
+  border-color: var(--gold);
+  background: rgba(245, 233, 201, .07);
+}
+
+.code-input {
+  font: 700 2rem/1 var(--display);
+  text-align: center;
+  letter-spacing: .5em;
+  text-indent: .5em;   /* re-centre against the trailing letter-space */
+  text-transform: uppercase;
+  padding: 1rem .5rem;
+}
+
+textarea { min-height: 14rem; resize: vertical; line-height: 1.7; }
+
+/* ── Buttons ─────────────────────────────────────────────── */
+
+.btn {
+  display: block;
+  width: 100%;
+  margin-top: 1.75rem;
+  padding: 1rem 1.25rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--gold);
+  background: transparent;
+  color: var(--gold);
+  font: 600 1rem/1 var(--serif);
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background .18s, color .18s, opacity .18s;
+}
+.btn.primary { background: var(--gold); color: #14100a; }
+.btn:active { transform: translateY(1px); }
+.btn:disabled { opacity: .35; cursor: not-allowed; }
+
+.chip {
+  border: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--gold);
+  font: 400 .8125rem/1 var(--serif);
+  padding: .5rem .75rem;
+  border-radius: 100px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.code-chip {
+  font-family: var(--display);
+  font-weight: 700;
+  letter-spacing: .22em;
+  color: var(--parchment);
+}
+
+/* ── Lobby ───────────────────────────────────────────────── */
+
+.guest-list { list-style: none; margin: 0; padding: 0; }
+.guest-list li {
+  display: flex; align-items: center; gap: .75rem;
+  padding: .8125rem 0;
+  border-bottom: 1px solid rgba(107, 99, 85, .18);
+  animation: fade .4s ease both;
+}
+.guest-list li::before {
+  content: '';
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--gold);
+  flex: none;
+}
+.guest-list li.is-you { color: var(--gold); }
+.guest-list li.is-you::after { content: 'you'; margin-left: auto; font-size: .75rem; letter-spacing: .12em; text-transform: uppercase; color: var(--smoke); }
+
+.waiting { display: flex; align-items: center; gap: .625rem; color: var(--smoke); font-size: .9375rem; margin: 2rem 0 0; }
+.pulse {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--blood);
+  flex: none;
+  animation: pulse 1.9s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100% { opacity: .25; } 50% { opacity: 1; } }
+
+/* ── Envelope ────────────────────────────────────────────── */
+
+.envelope {
+  display: block;
+  width: min(19rem, 82vw);
+  margin: 2.5rem auto 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  perspective: 1100px;
+}
+
+.envelope-body {
+  position: relative;
+  aspect-ratio: 3 / 2;
+  transition: transform .5s ease;
+}
+.envelope:active .envelope-body { transform: scale(.97); }
+
+.envelope-back, .envelope-front, .envelope-flap, .envelope-letter {
+  position: absolute; inset: 0;
+  border-radius: 2px;
+}
+
+.envelope-back  { background: #6d5334; }
+.envelope-front {
+  background: linear-gradient(160deg, #8a6b45, #6d5334 65%);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
+  box-shadow: 0 14px 34px rgba(0,0,0,.5);
+  z-index: 3;
+}
+
+/* The flap folds up and back on its top edge */
+.envelope-flap {
+  background: linear-gradient(180deg, #96754c, #7a5c3a);
+  clip-path: polygon(0 0, 100% 0, 50% 62%);
+  transform-origin: top center;
+  transition: transform .65s cubic-bezier(.6,.02,.3,1);
+  z-index: 4;
+  backface-visibility: hidden;
+}
+
+.envelope-letter {
+  background: linear-gradient(175deg, #f7ecd2, #e8d9b2);
+  inset: 8% 6% auto 6%;
+  height: 84%;
+  transform: translateY(0) scale(.97);
+  transition: transform .6s cubic-bezier(.2,.7,.3,1) .25s;
+  z-index: 2;
+  box-shadow: inset 0 0 40px rgba(139,110,60,.18);
+}
+
+.wax-seal {
+  position: absolute;
+  left: 50%; top: 56%;
+  width: 3.25rem; height: 3.25rem;
+  margin: -1.625rem 0 0 -1.625rem;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #a82626, var(--blood) 60%, #5e1010);
+  box-shadow: 0 3px 10px rgba(0,0,0,.55), inset 0 -2px 6px rgba(0,0,0,.35);
+  color: rgba(245,233,201,.85);
+  font: 700 1.375rem/3.25rem var(--display);
+  text-align: center;
+  z-index: 5;
+  transition: transform .35s ease, opacity .35s ease;
+}
+
+/* Opened state */
+.envelope.is-open .envelope-flap  { transform: rotateX(-172deg); z-index: 1; }
+.envelope.is-open .envelope-letter { transform: translateY(-32%) scale(1); }
+.envelope.is-open .wax-seal        { transform: scale(.55) translateY(-30%); opacity: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .envelope-flap, .envelope-letter, .wax-seal, .envelope-body { transition-duration: .01ms; }
+  .screen.is-on { animation: none; }
+}
+
+/* ── Parchment card ──────────────────────────────────────── */
+
+.parchment {
+  background:
+    radial-gradient(ellipse at 20% 0%, rgba(255,255,255,.5), transparent 55%),
+    linear-gradient(168deg, #f7edd6, #e9dab6);
+  color: var(--ink);
+  border-radius: var(--radius);
+  padding: 1.75rem 1.5rem;
+  box-shadow: 0 16px 40px rgba(0,0,0,.5);
+  animation: fade .5s ease both;
+}
+.parchment .eyebrow { color: var(--blood); }
+.parchment .display { color: var(--ink); }
+.parchment .rule {
+  background: linear-gradient(90deg, transparent, rgba(43,32,22,.28) 15%, rgba(43,32,22,.28) 85%, transparent);
+}
+
+.card-title { font-style: italic; color: #6b5a42; margin: 0; }
+
+.field { margin: 1.5rem 0 0; }
+.field-label {
+  font-size: .75rem;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--blood);
+  margin: 0 0 .375rem;
+}
+.field-body { margin: 0; }
+
+/* Role-specific fields get a rule down the left so they read as
+   "this part is yours alone" rather than more biography. */
+.field.is-private {
+  border-left: 2px solid var(--blood);
+  padding-left: .875rem;
+  margin-left: -.125rem;
+}
+
+.field ul { margin: 0; padding-left: 1.1rem; }
+.field li { margin: 0 0 .625rem; }
+
+/* ── Game bar + tabs ─────────────────────────────────────── */
+
+.bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  padding: 1rem var(--pad);
+  border-bottom: 1px solid var(--hairline);
+  background: var(--bg-raised);
+  position: sticky; top: 0; z-index: 10;
+}
+.bar-sub { margin: .125rem 0 0; font-size: .875rem; color: var(--smoke); font-style: italic; }
+.bar .eyebrow { margin: 0; }
+
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--bg-raised);
+  position: sticky; top: 0; z-index: 9;
+}
+.tab {
+  flex: 1;
+  padding: .875rem .5rem;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--smoke);
+  font: 400 .9375rem/1 var(--serif);
+  letter-spacing: .04em;
+  cursor: pointer;
+}
+.tab.is-on { color: var(--gold); border-bottom-color: var(--gold); }
+
+.badge {
+  display: inline-block;
+  min-width: 1.25rem;
+  padding: .0625rem .3125rem;
+  border-radius: 100px;
+  background: var(--blood);
+  color: var(--parchment);
+  font-size: .6875rem;
+  vertical-align: 1px;
+}
+.badge:empty, .badge[data-zero] { display: none; }
+
+.tab-panel { display: none; }
+.tab-panel.is-on { display: block; }
+
+/* ── Clue feed ───────────────────────────────────────────── */
+
+.clue-feed { list-style: none; margin: 0; padding: 0; }
+.clue-feed li {
+  border-left: 2px solid var(--blood);
+  padding: .25rem 0 .25rem 1rem;
+  margin: 0 0 1.75rem;
+  animation: slide .5s ease both;
+}
+@keyframes slide { from { opacity: 0; transform: translateX(-8px); } }
+
+.clue-title {
+  font: 700 1.1875rem/1.25 var(--display);
+  margin: 0 0 .375rem;
+  color: var(--parchment);
+}
+.clue-text { margin: 0; color: #c2b596; }
+.clue-num {
+  font-size: .75rem;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--smoke);
+  margin: 0 0 .25rem;
+}
+
+/* ── Ballot ──────────────────────────────────────────────── */
+
+.ballot { list-style: none; margin: 1.5rem 0 0; padding: 0; }
+.ballot li { margin: 0 0 .75rem; }
+.ballot button {
+  display: flex; align-items: baseline; gap: .75rem;
+  width: 100%;
+  padding: 1rem 1.125rem;
+  background: rgba(245,233,201,.04);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  color: var(--parchment);
+  font: 400 1.0625rem/1.3 var(--serif);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .16s, background .16s;
+}
+.ballot button:disabled { opacity: .5; cursor: default; }
+.ballot .who { color: var(--smoke); font-size: .875rem; }
+.ballot button[aria-pressed="true"] {
+  border-color: var(--blood);
+  background: rgba(139,26,26,.16);
+}
+.ballot button[aria-pressed="true"] .who { color: #c99b98; }
+
+/* ── Reveal ──────────────────────────────────────────────── */
+
+#reveal-verdict.win  { color: var(--gold); }
+#reveal-verdict.lose { color: #c0504d; }
+
+.cast-list { list-style: none; margin: 1rem 0 0; padding: 0; }
+.cast-list li {
+  display: flex; align-items: baseline; gap: .625rem;
+  padding: .75rem 0;
+  border-bottom: 1px solid rgba(107,99,85,.18);
+}
+.cast-list .role {
+  margin-left: auto;
+  font-size: .6875rem;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--smoke);
+  white-space: nowrap;
+}
+.cast-list .role.KILLER { color: #c0504d; }
+.cast-list .role.DETECTIVE { color: var(--gold); }
+.cast-list .cast-player { color: var(--smoke); font-size: .875rem; }
+
+[hidden] { display: none !important; }

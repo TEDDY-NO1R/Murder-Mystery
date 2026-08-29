@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0f0a04">
+<meta name="robots" content="noindex, nofollow">
+<title>Sign in — Murder Mystery</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,700;1,500&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/admin.css">
+</head>
+<body>
+
+<div class="shell">
+  <div class="login">
+    <h2 class="display">Story editor</h2>
+    <p class="lede">Everything behind this login is a spoiler.</p>
+
+    <form id="form" autocomplete="on">
+      <label for="email">Email</label>
+      <input id="email" type="email" autocomplete="username" required autofocus>
+
+      <label for="password">Password</label>
+      <input id="password" type="password" autocomplete="current-password" required>
+
+      <div style="margin-top:1.5rem">
+        <button class="btn primary block" id="btn" type="submit">Sign in</button>
+      </div>
+
+      <p class="error" id="error" role="alert" hidden></p>
+    </form>
+
+    <hr class="rule">
+    <p class="small dim">
+      Players never sign in here — their phones authenticate anonymously and
+      the security rules refuse them every path under <code>/stories</code>.
+    </p>
+  </div>
+</div>
+
+<script type="module">
+import { waitForAuth, signInHost, describeError, IS_FILE_PROTOCOL }
+  from '../js/firebase-init.js';
+
+const $ = id => document.getElementById(id);
+const NEXT = 'story.html';
+
+if (IS_FILE_PROTOCOL) {
+  $('error').textContent = 'Open this page from its web address, not from a file.';
+  $('error').hidden = false;
+  $('btn').disabled = true;
+}
+
+// Already signed in with a real account? Skip the form.
+const existing = await waitForAuth();
+if (existing && !existing.isAnonymous) location.replace(NEXT);
+
+$('form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = $('btn'), err = $('error');
+  err.hidden = true;
+  btn.disabled = true;
+  try {
+    await signInHost($('email').value, $('password').value);
+    location.replace(NEXT);
+  } catch (ex) {
+    err.textContent = describeError(ex);
+    err.hidden = false;
+    btn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>

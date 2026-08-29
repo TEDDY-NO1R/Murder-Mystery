@@ -1,0 +1,14 @@
+# Story secrets — never commit to a public repo.
+#
+# js/admin-seed.js holds every character secret and the full solution
+# for The Speckled Band. It is a one-time seeding script: run it once
+# from localhost, after which the story lives in Firestore and is
+# edited through admin/story.html.
+#
+# _redirects also blocks these on Netlify, in case they are ever
+# deployed by drag-and-drop rather than from this repo.
+js/admin-seed.js
+admin/seed.html
+
+# Local tooling
+.claude/

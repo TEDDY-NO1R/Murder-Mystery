@@ -1,0 +1,265 @@
+/* ============================================================
+   MURDER MYSTERY — host & admin surfaces
+   Desktop-first control panel. Same palette as the player
+   client, but denser: this is read at arm's length on a laptop
+   while running a room, not held close in the dark.
+   ============================================================ */
+
+:root {
+  --bg:        #0f0a04;
+  --parchment: #f5e9c9;
+  --blood:     #8b1a1a;
+  --gold:      #c8a84b;
+  --smoke:     #6b6355;
+
+  --panel:    #17100a;
+  --panel-2:  #1e150d;
+  --hairline: rgba(200, 168, 75, .18);
+
+  --serif:   'Crimson Text', Georgia, 'Times New Roman', serif;
+  --display: 'Playfair Display', Georgia, serif;
+  --mono:    ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  --radius: 4px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100svh;
+  background: var(--bg);
+  color: var(--parchment);
+  font: 400 1rem/1.6 var(--serif);
+}
+
+/* ── Layout ──────────────────────────────────────────────── */
+
+.shell { max-width: 76rem; margin: 0 auto; padding: 1.5rem 1.25rem 5rem; }
+
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1.5rem; flex-wrap: wrap;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--panel);
+  position: sticky; top: 0; z-index: 20;
+}
+.topbar h1 {
+  font: 700 1.25rem/1 var(--display);
+  margin: 0;
+  letter-spacing: .01em;
+}
+.topbar .spacer { flex: 1; }
+
+.cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.25rem;
+  margin-top: 1.5rem;
+}
+@media (min-width: 60rem) {
+  .cols { grid-template-columns: 20rem minmax(0, 1fr); align-items: start; }
+  .cols.wide { grid-template-columns: 22rem minmax(0, 1fr); }
+}
+
+/* ── Panels ──────────────────────────────────────────────── */
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+}
+.panel + .panel { margin-top: 1.25rem; }
+
+.panel-title {
+  font-size: .75rem;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin: 0 0 1rem;
+  display: flex; align-items: center; justify-content: space-between; gap: .75rem;
+}
+.panel-title .count { color: var(--smoke); letter-spacing: .08em; }
+
+h2.display { font: 700 1.5rem/1.15 var(--display); margin: 0 0 .5rem; }
+.lede  { color: #cdbf9e; font-style: italic; margin: 0; }
+.dim   { color: var(--smoke); }
+.small { font-size: .875rem; }
+.error { color: #d4736f; font-size: .9375rem; margin: .75rem 0 0; }
+.ok    { color: #7fa650; }
+
+hr.rule {
+  border: 0; height: 1px; margin: 1.25rem 0;
+  background: linear-gradient(90deg, transparent, var(--hairline) 10%, var(--hairline) 90%, transparent);
+}
+
+/* ── Room code ───────────────────────────────────────────── */
+
+.roomcode {
+  font: 700 clamp(2.5rem, 9vw, 4rem)/1 var(--display);
+  letter-spacing: .18em;
+  color: var(--parchment);
+  margin: 0;
+  text-indent: .18em;
+  user-select: all;
+}
+.roomcode-label {
+  font-size: .75rem; letter-spacing: .18em; text-transform: uppercase;
+  color: var(--gold); margin: 0 0 .375rem;
+}
+
+/* ── Buttons ─────────────────────────────────────────────── */
+
+.btn {
+  display: inline-block;
+  padding: .75rem 1.25rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--gold);
+  background: transparent;
+  color: var(--gold);
+  font: 600 .9375rem/1 var(--serif);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background .16s, color .16s, opacity .16s;
+}
+.btn:hover:not(:disabled) { background: var(--gold); color: #14100a; }
+.btn.primary { background: var(--gold); color: #14100a; }
+.btn.primary:hover:not(:disabled) { background: #d8bb63; }
+.btn.ghost { border-color: var(--hairline); color: var(--smoke); }
+.btn.ghost:hover:not(:disabled) { background: rgba(245,233,201,.06); color: var(--parchment); }
+.btn.danger { border-color: var(--blood); color: #d4736f; }
+.btn.danger:hover:not(:disabled) { background: var(--blood); color: var(--parchment); }
+.btn.block { display: block; width: 100%; }
+.btn:disabled { opacity: .32; cursor: not-allowed; }
+.btn.sm { padding: .5rem .75rem; font-size: .8125rem; letter-spacing: .06em; }
+
+.btn-row { display: flex; gap: .625rem; flex-wrap: wrap; }
+
+/* ── Forms ───────────────────────────────────────────────── */
+
+label {
+  display: block;
+  font-size: .75rem; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--smoke); margin: 1rem 0 .375rem;
+}
+input, textarea, select {
+  width: 100%;
+  padding: .75rem .875rem;
+  background: rgba(245,233,201,.045);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  color: var(--parchment);
+  font: 400 1rem/1.5 var(--serif);
+}
+input:focus, textarea:focus, select:focus {
+  outline: none; border-color: var(--gold); background: rgba(245,233,201,.07);
+}
+textarea { resize: vertical; min-height: 6rem; line-height: 1.65; }
+
+.login { max-width: 24rem; margin: 12vh auto 0; }
+
+/* ── Player roster ───────────────────────────────────────── */
+
+.roster { list-style: none; margin: 0; padding: 0; }
+.roster li {
+  display: flex; align-items: baseline; gap: .625rem;
+  padding: .6875rem 0;
+  border-bottom: 1px solid rgba(107,99,85,.16);
+}
+.roster li:last-child { border-bottom: 0; }
+.roster .pname { font-size: 1.0625rem; }
+.roster .pchar { color: var(--gold); font-size: .875rem; }
+.roster .prole {
+  margin-left: auto;
+  font-size: .6875rem; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--smoke); white-space: nowrap;
+}
+.roster .prole.KILLER     { color: #c0504d; }
+.roster .prole.DETECTIVE  { color: var(--gold); }
+.roster .prole.ACCOMPLICE { color: #b07a4a; }
+
+.empty { color: var(--smoke); font-style: italic; padding: .5rem 0; }
+
+/* ── Phase stepper ───────────────────────────────────────── */
+
+.phases { list-style: none; margin: 0 0 1.25rem; padding: 0; display: flex; flex-wrap: wrap; gap: .375rem; }
+.phases li {
+  font-size: .75rem; letter-spacing: .1em; text-transform: uppercase;
+  padding: .4375rem .6875rem;
+  border: 1px solid var(--hairline);
+  border-radius: 100px;
+  color: var(--smoke);
+}
+.phases li.done { color: var(--smoke); opacity: .5; }
+.phases li.now  { border-color: var(--gold); color: var(--gold); background: rgba(200,168,75,.1); }
+
+/* ── Clue list ───────────────────────────────────────────── */
+
+.clues { list-style: none; margin: 0; padding: 0; }
+.clue {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto;
+  gap: .75rem 1rem;
+  align-items: start;
+  padding: .9375rem 0;
+  border-bottom: 1px solid rgba(107,99,85,.16);
+}
+.clue:last-child { border-bottom: 0; }
+.clue h4 { font: 700 1.0625rem/1.3 var(--display); margin: 0 0 .25rem; }
+.clue p  { margin: 0; color: #b3a68a; font-size: .9375rem; }
+.clue.is-out h4 { color: var(--smoke); }
+.clue.is-out p  { color: var(--smoke); opacity: .7; }
+
+.phase-group {
+  font-size: .6875rem; letter-spacing: .18em; text-transform: uppercase;
+  color: var(--gold);
+  margin: 1.5rem 0 .25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--hairline);
+}
+.phase-group:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+
+/* ── Votes ───────────────────────────────────────────────── */
+
+.tally { list-style: none; margin: 0; padding: 0; }
+.tally li { display: flex; align-items: center; gap: .75rem; padding: .5rem 0; }
+.tally .bar {
+  flex: 1;
+  height: 6px;
+  background: rgba(245,233,201,.08);
+  border-radius: 100px;
+  overflow: hidden;
+}
+.tally .bar span { display: block; height: 100%; background: var(--blood); }
+.tally .n { color: var(--smoke); font-size: .875rem; min-width: 1.5rem; text-align: right; }
+
+/* ── Spoiler block ───────────────────────────────────────── */
+
+.spoiler { position: relative; }
+.spoiler.is-hidden .spoiler-body { filter: blur(9px); opacity: .55; pointer-events: none; user-select: none; }
+.spoiler-body { transition: filter .2s, opacity .2s; }
+
+/* ── Toast ───────────────────────────────────────────────── */
+
+.toast {
+  position: fixed; left: 50%; bottom: 1.5rem; transform: translateX(-50%);
+  background: var(--panel-2);
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--gold);
+  border-radius: var(--radius);
+  padding: .75rem 1.125rem;
+  font-size: .9375rem;
+  box-shadow: 0 12px 32px rgba(0,0,0,.6);
+  z-index: 50;
+  animation: rise .3s ease both;
+  max-width: min(30rem, 90vw);
+}
+.toast.bad { border-left-color: var(--blood); color: #e8b3b0; }
+@keyframes rise { from { opacity: 0; transform: translate(-50%, 8px); } }
+
+code, .mono { font-family: var(--mono); font-size: .875rem; color: var(--gold); }
+
+[hidden] { display: none !important; }
