@@ -1,5 +1,9 @@
 # Murder Mystery
 
+> **Picking this up fresh?** Read **[HANDOFF.md](HANDOFF.md)** first — it has
+> the current status, the one remaining blocker, and where to find the files
+> that are deliberately not in this repo.
+
 A murder mystery party game for people sitting in the same room.
 
 Everyone joins with a room code. Each guest's phone becomes their private
