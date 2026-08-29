@@ -302,17 +302,20 @@ move it to an environment variable.
    **Publish directory:** `.` (a single dot).
 4. **Deploy**.
 
-### Then do this — it's easy to miss
+### Authorized domains — not needed for this build
 
-Firebase blocks logins from domains it doesn't recognise, so your host
-login will fail on the live site until you add it:
+Firebase's **Authentication → Settings → Authorized domains** list gates
+**OAuth redirect flows only** — Google, Phone, and other third-party
+sign-in. This project uses neither: players sign in anonymously and the
+host uses email/password, and both are direct API calls that work from
+any origin.
 
-1. Firebase Console → **Authentication → Settings → Authorized domains**.
-2. **Add domain** → paste your Netlify domain (just
-   `cheerful-otter-a1b2c3.netlify.app`, no `https://`, no trailing slash).
+Verified on 29 Aug: the live site authenticates players correctly while
+the authorized-domain list contains only `localhost`,
+`murder-mystery-online.firebaseapp.com` and `murder-mystery-online.web.app`.
 
-`localhost` is already on the list, which is why local testing works
-without this.
+Add your Netlify domain anyway if you ever enable Google sign-in. Until
+then it changes nothing.
 
 ---
 
@@ -365,7 +368,9 @@ The UID on the `isAdmin()` line doesn't match your account. Recopy it from
 Authentication → Users and republish the rules.
 
 **Host login fails on the live site but works locally**
-You skipped the Authorized domains step at the end of section 8.
+Not an authorized-domains problem — email/password works from any origin.
+Check the browser console for the real error; `auth/invalid-credential`
+means the email or password is simply wrong.
 
 **Players can't join / room code not found**
 Room codes are per-session and die when you close the host tab. Start a
