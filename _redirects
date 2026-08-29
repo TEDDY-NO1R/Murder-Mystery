@@ -11,3 +11,8 @@
 # No reason to serve these either.
 /firestore.rules    /404.html   404!
 /SETUP.md           /404.html   404!
+
+# The bare domain should open the game, not a 404. A 200 rewrite serves
+# play.html at / without changing the address bar, so the shared link and
+# the og:url agree.
+/                   /play.html  200
