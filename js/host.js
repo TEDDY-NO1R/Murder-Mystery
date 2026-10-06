@@ -46,6 +46,43 @@ const unsub = { session: null, players: null, votes: null };
 
 const LAST = 'mm:host-room';
 
+// Forget everything that belongs to one room, so the next room can
+// never show the previous game's cast, votes or solution.
+function resetRoomState() {
+  state.code = state.session = null;
+  state.players = [];
+  state.votes = [];
+  state.cast = [];
+
+  const box = $('#spoiler');
+  box.classList.add('is-hidden');
+  $('#spoiler-btn').textContent = 'Show';
+
+  renderRoster();
+  renderVotes();
+  renderSpoiler();
+}
+
+// Firestore does not cascade deletes. Remove every child of a
+// session explicitly, in chunks well under the 500-write batch
+// limit. When `andSession` is set the session document goes in the
+// final chunk, so players see "the host ended this game" only once
+// nothing of it is left behind.
+async function purgeRoom(code, { andSession = false } = {}) {
+  const refs = [];
+  for (const col of [paths.players(code), paths.privates(code), paths.votes(code)]) {
+    (await getDocs(col)).docs.forEach(d => refs.push(d.ref));
+  }
+  refs.push(paths.reveal(code));          // deleting a missing doc is a no-op
+  if (andSession) refs.push(paths.session(code));
+
+  for (let i = 0; i < refs.length; i += 400) {
+    const batch = writeBatch(db);
+    refs.slice(i, i + 400).forEach(r => batch.delete(r));
+    await batch.commit();
+  }
+}
+
 // ------------------------------------------------------------
 //  Chrome
 // ------------------------------------------------------------
@@ -164,6 +201,12 @@ $('#create-btn').addEventListener('click', async () => {
     }
     if (!code) throw new Error('Could not find a free room code. Try again.');
 
+    // A code whose earlier room was closed before cleanup existed
+    // (or whose cleanup was interrupted) may still have children.
+    // Clear them so an old roster, card or vote cannot leak into
+    // the new room.
+    await purgeRoom(code);
+
     // storyTitle and storySynopsis are copied here on purpose:
     // players are not allowed to read /stories, so this document
     // is where the public half of the story reaches them.
@@ -196,6 +239,7 @@ $('#create-btn').addEventListener('click', async () => {
 
 async function attach(code) {
   detach();
+  resetRoomState();
   state.code = code;
   view('game');
 
@@ -207,6 +251,7 @@ async function attach(code) {
     state.session = snap.data();
     renderPhase();
     renderClues();
+    renderRoster();      // start button and lobby controls follow status
   }, err => toast(describeError(err), true));
 
   unsub.players = onSnapshot(paths.players(code), snap => {
@@ -243,7 +288,7 @@ function detach() {
 function closedElsewhere() {
   detach();
   localStorage.removeItem(LAST);
-  state.code = state.session = null;
+  resetRoomState();
   view('setup');
   toast('That room no longer exists.', true);
 }
@@ -283,6 +328,25 @@ function pickCharacters(count) {
   return chosen;
 }
 
+// Refuse to deal a story whose ending would contradict the cast.
+// The editor warns about these, but saving there is not the last
+// line — this is, because it is the moment the solution is fixed.
+function storyProblems() {
+  const out = [];
+  const of = r => state.chars.filter(c => c.role === r);
+  const killers = of(ROLES.KILLER), detectives = of(ROLES.DETECTIVE);
+  if (killers.length !== 1)    out.push(`it needs exactly 1 killer (has ${killers.length})`);
+  if (detectives.length !== 1) out.push(`it needs exactly 1 detective (has ${detectives.length})`);
+  if (of(ROLES.ACCOMPLICE).length > 1) out.push('it has more than 1 accomplice');
+  const unknown = state.chars.filter(c => !Object.values(ROLES).includes(c.role));
+  if (unknown.length) out.push(`these characters have no valid role: ${unknown.map(c => c.id).join(', ')}`);
+  const solId = state.story?.solution?.killerId;
+  if (killers.length === 1 && solId && solId !== killers[0].id) {
+    out.push(`the solution names "${solId}", but the killer is "${killers[0].id}"`);
+  }
+  return out;
+}
+
 // Build the document that goes to one player's phone. Explicitly
 // constructed field by field: a character could grow a new secret
 // field tomorrow and it still would not reach anyone unless
@@ -319,7 +383,14 @@ $('#start-btn').addEventListener('click', async () => {
       throw new Error(`This story seats at most ${state.story.maxPlayers} players.`);
     }
 
+    const problems = storyProblems();
+    if (problems.length) {
+      throw new Error(`Fix the story before dealing: ${problems.join('; ')}.`);
+    }
+
     const chosen = shuffle(pickCharacters(n));
+    const killer = chosen.find(c => c.role === ROLES.KILLER);
+    if (!killer) throw new Error('No killer was dealt. Check the story roles.');
     const batch = writeBatch(db);
     const cast = [];
 
@@ -346,10 +417,12 @@ $('#start-btn').addEventListener('click', async () => {
     });
 
     // The answer. Written now, but the rules refuse every read of
-    // it until currentPhase is actually 'reveal'.
+    // it until currentPhase is actually 'reveal'. Always the dealt
+    // killer — storyProblems() has already refused a solution that
+    // names anyone else.
     const sol = state.story.solution || {};
     batch.set(paths.reveal(state.code), {
-      killerId: sol.killerId || (chosen.find(c => c.role === ROLES.KILLER)?.id ?? ''),
+      killerId: killer.id,
       headline: sol.headline || '',
       method:   sol.method   || '',
       motive:   sol.motive   || '',
@@ -357,9 +430,12 @@ $('#start-btn').addEventListener('click', async () => {
       cast
     });
 
+    // castIds lets the rules check that a vote names someone really
+    // in this game. Sorted so the list order says nothing about roles.
     batch.update(paths.session(state.code), {
       status: 'live',
       currentPhase: 'arrival',
+      castIds: chosen.map(c => c.id).sort(),
       startedAt: serverTimestamp()
     });
 
@@ -406,16 +482,34 @@ async function setPhase(phase) {
 
 $('#close-btn').addEventListener('click', async () => {
   if (!confirm('Close this room? Players will be returned to the join screen.')) return;
+  const btn = $('#close-btn');
+  btn.disabled = true;
   try {
-    // Subcollections are not removed by deleting the parent, but
-    // the rules make every one of them unreachable without the
-    // session document, so nothing is left readable.
-    await deleteDoc(paths.session(state.code));
+    // Subcollections are not removed by deleting the parent, so
+    // delete every child first and the session last. The rules
+    // also refuse player reads of children whose session is gone,
+    // in case this is interrupted part-way.
+    await purgeRoom(state.code, { andSession: true });
     localStorage.removeItem(LAST);
   } catch (ex) {
     toast(describeError(ex), true);
+  } finally {
+    btn.disabled = false;
   }
 });
+
+// Lobby only: turn away a guest who should not be there, or trim an
+// overfull room down to the maximum before dealing.
+async function removePlayer(p, btn) {
+  if (!confirm(`Remove ${p.name} from the room?`)) return;
+  btn.disabled = true;
+  try {
+    await deleteDoc(paths.player(state.code, p.uid));
+  } catch (ex) {
+    toast(describeError(ex), true);
+    btn.disabled = false;
+  }
+}
 
 // ------------------------------------------------------------
 //  Clue release
@@ -445,6 +539,7 @@ function renderRoster() {
   const ul = $('#roster');
   ul.innerHTML = '';
   const byUid = Object.fromEntries(state.cast.map(c => [c.uid, c]));
+  const inLobby = state.session?.status === 'open';
 
   state.players.forEach(p => {
     const li = document.createElement('li');
@@ -467,6 +562,16 @@ function renderRoster() {
       r.className = `prole ${role}`;
       r.textContent = role.toLowerCase();
       li.appendChild(r);
+    }
+
+    if (inLobby) {
+      const rm = document.createElement('button');
+      rm.className = 'btn ghost sm';
+      rm.type = 'button';
+      rm.textContent = 'Remove';
+      rm.style.marginLeft = 'auto';
+      rm.addEventListener('click', () => removePlayer(p, rm));
+      li.appendChild(rm);
     }
 
     ul.appendChild(li);
@@ -616,7 +721,7 @@ function renderSpoiler() {
   }
 
   const sol = state.story?.solution || {};
-  const killer = state.cast.find(c => c.characterId === sol.killerId);
+  const killer = state.cast.find(c => c.role === ROLES.KILLER);
 
   const h = document.createElement('p');
   h.textContent = killer

@@ -20,9 +20,10 @@ Native mode. Some of this guide is already done.
 | 3b. Anonymous enabled | Done — 29 Aug, with auto clean-up of stale guest accounts |
 | 4. Host account | Done — `hasthimunisilva@icloud.com`, UID `B8CkPp6XqTcHfvOcZHE8ghqNahI3` |
 | 5. Web app registered | Done — "Murder Mystery Web"; config already baked into `js/firebase-init.js` |
-| 6. Rules | **Temporary deny-all published 29 Aug.** Replace with the real `firestore.rules` — see Sequence below. |
+| 6. Rules | Real `firestore.rules` published 29 Aug; tightened revision republished 6 Oct 2026. |
+| 7. Story seeded | **Not done as of 29 Aug.** Seed files are not on this machine — see HANDOFF.md. |
 
-### What was found, and why the rules are locked
+### What was found on 29 Aug (history)
 
 The rules in place until 29 Aug were:
 
@@ -34,8 +35,8 @@ match /stories/{storyId} {
 
 `if true` means no login of any kind. All five stories — 31 `secret`
 fields — were fetchable over plain HTTP by anyone who knew the project
-ID. Verified with curl, then closed the same day. A deny-all rule set is
-live now and returns `403 PERMISSION_DENIED` on every path.
+ID. Verified with curl, then closed the same day with a temporary
+deny-all rule set, which the real `firestore.rules` then replaced.
 
 ### The structural problem to fix before reopening
 
@@ -55,8 +56,10 @@ the only shape in which the guarantee is expressible.
 **Sequence:**
 
 1. Deny-all published — done.
-2. Publish the real `firestore.rules` (section 6).
-3. Deploy (section 8), then run `admin/seed.html` once (section 7).
+2. Publish the real `firestore.rules` (section 6) — done 29 Aug; 6 Oct
+   revision republished.
+3. Deploy (section 8), then run `admin/seed.html` once (section 7) — not
+   done yet.
 
 Step 2 is safe to do before seeding because the whole `stories` tree is
 admin-only in the real rules — players never read it at all, so the
@@ -208,9 +211,14 @@ secret in the game is public.
 |---|---|---|
 | `stories/**` — the whole tree | **denied — entirely** | read + write |
 | `sessions/{id}` | read | read + write |
-| `sessions/{id}/players/*` | read all, write own | read + write |
+| `sessions/{id}/players/*` | read own, or all once joined; join only while the lobby is open; rename self | read + write + remove guests |
 | `sessions/{id}/private/{uid}` | **read own only** | read + write |
-| `sessions/{id}/votes/*` | write own only | read + write |
+| `sessions/{id}/votes/*` | read own; cast once, in accusation, only if dealt, for another dealt character; all visible at reveal | read + delete |
+| `sessions/{id}/reveal/summary` | read only at reveal, and only if joined | read + write |
+
+Every player read of a session's children also requires the session
+document to still exist, so a closed room's leftovers are unreadable.
+The host deletes those children when closing a room anyway.
 
 The important row is `private/{uid}`. When you start a game, your host
 browser reads the story's characters, deals them out, and writes each
@@ -324,13 +332,16 @@ then it changes nothing.
 Do this once. It takes two minutes and it's the only way to know.
 
 1. Open `host.html`, sign in, start a game.
-2. Join from a phone (or a second browser) at `play.html`.
+2. Join from a phone, or from a **different browser profile / private
+   window**, at `play.html`. Not a second tab of the host's browser: tabs
+   in one profile share one login, so that tab would be the host, not a
+   player. `play.html` now refuses to run there and says so.
 3. On the **player's** browser, open DevTools → **Console**, and run:
 
    ```js
    const { getFirestore, getDocs, collection } =
      await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
-   await getDocs(collection(getFirestore(), 'stories/SPECKLED_BAND/characters'));
+   await getDocs(collection(getFirestore(), 'stories/speckled-band/characters'));
    ```
 
 4. **You must see:** `FirebaseError: Missing or insufficient permissions.`
@@ -373,8 +384,24 @@ Check the browser console for the real error; `auth/invalid-credential`
 means the email or password is simply wrong.
 
 **Players can't join / room code not found**
-Room codes are per-session and die when you close the host tab. Start a
-fresh game and read the new code.
+A room lasts until the host clicks **Close room** — closing or reloading
+the host tab does not end it, and `host.html` resumes the same room next
+time it is opened in that browser. A code stops working once the room is
+closed, and joining is refused once the host has started the game (late
+arrivals cannot be dealt in). Check the code on the host screen, or open
+a fresh room.
+
+**Too many people joined, or someone joined by mistake**
+While the room is still in the lobby, click **Remove** beside their name
+on the host screen. The game deals at most 8.
+
+**"This browser is signed in as the host" on play.html**
+Play from another device, another browser profile, or a private window.
+
+**Start game says "Fix the story before dealing"**
+The story needs exactly one KILLER and one DETECTIVE, every character
+needs a role, and the solution's killer must be the KILLER character. Fix
+it in `admin/story.html`.
 
 **Seed page says permission denied**
 You're signed in as the wrong account, or the rules aren't published yet.

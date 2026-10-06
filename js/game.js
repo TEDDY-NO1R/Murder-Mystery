@@ -19,7 +19,7 @@
 
 import {
   waitForAuth, signInPlayer, describeError,
-  paths, getDoc, setDoc, getDocs, onSnapshot, serverTimestamp,
+  paths, getDoc, setDoc, updateDoc, getDocs, onSnapshot, serverTimestamp,
   normaliseRoomCode, CODE_LENGTH, phaseMeta, ROLE_FIELDS, ROLES,
   IS_FILE_PROTOCOL
 } from './firebase-init.js';
@@ -42,6 +42,9 @@ const state = {
 };
 
 const unsub = { session: null, players: null, card: null };
+
+let picked = null;     // ballot choice not yet submitted
+let revealed = false;  // reveal already fetched for this room
 
 // Per-device memory. Notes and "have I opened my envelope" are
 // deliberately local — there is no Firestore path a player is
@@ -125,18 +128,25 @@ $('#join-form').addEventListener('submit', async (e) => {
     const snap = await getDoc(paths.session(code));
     if (!snap.exists()) throw new Error('No game with that code. Check with the host.');
 
-    const session = snap.data();
-    if (session.status && session.status !== 'open') {
-      throw new Error('That game has already begun.');
-    }
+    // Already on this roster (e.g. came back after leaving the page):
+    // just take the seat again. The rules only allow a rename here.
+    const mine = await getDoc(paths.player(code, state.uid));
+    if (mine.exists()) {
+      if (mine.data().name !== name) await updateDoc(paths.player(code, state.uid), { name });
+    } else {
+      const session = snap.data();
+      if (session.status !== 'open' || session.currentPhase !== 'lobby') {
+        throw new Error('That game has already begun.');
+      }
 
-    // Rules allow exactly these two fields, and require joinedAt to
-    // be the server's clock — a phone cannot backdate itself to the
-    // front of the queue.
-    await setDoc(paths.player(code, state.uid), {
-      name,
-      joinedAt: serverTimestamp()
-    });
+      // Rules allow exactly these two fields, require joinedAt to be
+      // the server's clock, and refuse the write once the lobby has
+      // closed — the check above is only a friendlier message.
+      await setDoc(paths.player(code, state.uid), {
+        name,
+        joinedAt: serverTimestamp()
+      });
+    }
 
     localStorage.setItem(LAST, code);
     await attach(code);
@@ -154,7 +164,17 @@ $('#join-form').addEventListener('submit', async (e) => {
 
 async function attach(code) {
   detach();
+  resetRoomState();
   state.code = code;
+
+  // Per-room memory: notes from this phone, and a vote already cast
+  // (votes are final, so the ballot must stay locked after a refresh).
+  notepad.value = store.get('notes', '');
+  try {
+    const myVote = await getDoc(paths.vote(code, state.uid));
+    if (myVote.exists()) { state.vote = myVote.data().suspectId; picked = state.vote; }
+  } catch { /* no vote yet */ }
+  if (state.code !== code) return;   // left again while loading
 
   unsub.session = onSnapshot(paths.session(code),
     snap => {
@@ -163,7 +183,7 @@ async function attach(code) {
       renderSession();
       route();
     },
-    err => fail(err)
+    err => lost(err)
   );
 
   unsub.players = onSnapshot(paths.players(code),
@@ -171,22 +191,23 @@ async function attach(code) {
       state.players = snap.docs
         .map(d => ({ uid: d.id, ...d.data() }))
         .sort((a, b) => (a.joinedAt?.seconds || 0) - (b.joinedAt?.seconds || 0));
+      if (!state.players.some(p => p.uid === state.uid)) { leave(GONE); return; }
       renderLobby();
       renderBallot();
     },
-    err => fail(err)
+    err => lost(err)
   );
 
   // The load-bearing read. If someone tampered with this path to
   // point at another player, Firestore refuses it outright and we
-  // land in fail() — there is nothing to filter client-side.
+  // land in lost() — there is nothing to filter client-side.
   unsub.card = onSnapshot(paths.private(code, state.uid),
     snap => {
       state.card = snap.exists() ? snap.data() : null;
       renderCard();
       route();
     },
-    err => fail(err)
+    err => lost(err)
   );
 }
 
@@ -199,13 +220,67 @@ function fail(err) {
   boot(describeError(err));
 }
 
+// A live listener died. Once a room is closed or we are removed
+// from it, the rules refuse its documents — that is the expected
+// end of the game, not an error to sit on.
+const GONE = 'You are no longer in that room — the host ended the game or removed you.';
+
+function lost(err) {
+  if (err?.code === 'permission-denied') { leave(GONE); return; }
+  fail(err);
+}
+
 function leave(message) {
   detach();
   localStorage.removeItem(LAST);
-  state.code = state.session = state.card = null;
+  forgetRoom();
+  resetRoomState();
   show('join');
   const err = $('#join-error');
   if (message) { err.textContent = message; err.hidden = false; }
+}
+
+// Drop this phone's notes and envelope flags for a room that is
+// over. Room codes can be reused, and a new game under the same
+// code must not open with the old envelope already broken.
+function forgetRoom() {
+  if (!state.code) return;
+  const prefix = store.key('');
+  try {
+    Object.keys(localStorage).filter(k => k.startsWith(prefix)).forEach(k => localStorage.removeItem(k));
+  } catch { /* private mode */ }
+}
+
+// Wipe everything that belongs to one room — memory and screen —
+// so a second game on the same phone starts exactly like the first.
+function resetRoomState() {
+  state.code = state.session = state.card = state.vote = null;
+  state.players = [];
+  picked = null;
+  revealed = false;
+
+  const env = $('#envelope');
+  env.classList.remove('is-open');
+  $('#envelope-hint').textContent = 'Tap to break the seal';
+  $('#envelope-name').textContent = 'You';
+
+  ['#lobby-players', '#clue-feed', '#ballot', '#card-fields',
+   '#game-card', '#reveal-body', '#reveal-cast'].forEach(sel => { $(sel).innerHTML = ''; });
+  ['#lobby-count', '#card-role', '#card-name', '#card-title',
+   '#game-whoami', '#vote-status'].forEach(sel => { $(sel).textContent = ''; });
+
+  $('#clue-empty').hidden = false;
+  const badge = $('#clue-count');
+  badge.textContent = '0';
+  badge.toggleAttribute('data-zero', true);
+
+  $('#vote-btn').disabled = true;
+  const verdict = $('#reveal-verdict');
+  verdict.textContent = '…';
+  verdict.classList.remove('win', 'lose');
+
+  notepad.value = '';
+  document.querySelector('.tab[data-tab="clues"]').click();
 }
 
 // ------------------------------------------------------------
@@ -408,8 +483,6 @@ notepad.addEventListener('input', () => store.set('notes', notepad.value));
 //  Vote
 // ------------------------------------------------------------
 
-let picked = null;
-
 function renderBallot() {
   const list = $('#ballot');
   if (!list) return;
@@ -460,7 +533,8 @@ $('#vote-btn').addEventListener('click', async () => {
   btn.disabled = true;
   try {
     // Rules accept this only during the accusation phase, only from
-    // a player who actually joined, and only for themselves.
+    // a player who was dealt in, only for themselves, only once, and
+    // only naming another character in this game.
     await setDoc(paths.vote(state.code, state.uid), {
       suspectId: picked,
       castAt: serverTimestamp()
@@ -478,12 +552,11 @@ $('#vote-btn').addEventListener('click', async () => {
 //  Reveal
 // ------------------------------------------------------------
 
-let revealed = false;
-
 async function renderReveal() {
   if (revealed) return;
   revealed = true;
 
+  const code = state.code;   // a slow fetch must not paint into a later room
   const body = $('#reveal-body');
   const castList = $('#reveal-cast');
 
@@ -491,7 +564,8 @@ async function renderReveal() {
     // Before this moment the rules refuse this document — not
     // because the app hid it, but because sessions/{code}.currentPhase
     // was not yet 'reveal'.
-    const snap = await getDoc(paths.reveal(state.code));
+    const snap = await getDoc(paths.reveal(code));
+    if (state.code !== code) return;
     if (!snap.exists()) { body.textContent = 'The host has not written a reveal for this game.'; return; }
     const r = snap.data();
 
@@ -501,7 +575,8 @@ async function renderReveal() {
     let cls = '';
 
     if (detective) {
-      const votes = await getDocs(paths.votes(state.code));
+      const votes = await getDocs(paths.votes(code));
+      if (state.code !== code) return;
       const dv = votes.docs.find(d => d.id === detective.uid);
       const guess = dv?.data()?.suspectId;
       if (!guess) {
@@ -518,7 +593,8 @@ async function renderReveal() {
 
     const v = $('#reveal-verdict');
     v.textContent = verdict;
-    v.className = cls;
+    v.classList.remove('win', 'lose');
+    if (cls) v.classList.add(cls);
 
     body.innerHTML = '';
     if (r.headline) body.appendChild(field('What happened', r.headline, false));
@@ -547,6 +623,7 @@ async function renderReveal() {
       castList.appendChild(li);
     });
   } catch (err) {
+    if (state.code !== code) return;
     revealed = false;            // let a later snapshot retry
     body.textContent = describeError(err);
     console.error(err);
@@ -578,18 +655,10 @@ async function renderReveal() {
   // its roster — otherwise fall through to the join form.
   const last = localStorage.getItem(LAST);
   if (last) {
-    state.code = last;               // needed for the store key
     try {
       const mine = await getDoc(paths.player(last, state.uid));
-      if (mine.exists()) {
-        notepad.value = store.get('notes', '');
-        const myVote = await getDoc(paths.vote(last, state.uid));
-        if (myVote.exists()) { state.vote = myVote.data().suspectId; picked = state.vote; }
-        await attach(last);
-        return;
-      }
-    } catch { /* fall through to join */ }
-    state.code = null;
+      if (mine.exists()) { await attach(last); return; }
+    } catch { /* room gone — fall through to join */ }
     localStorage.removeItem(LAST);
   }
 

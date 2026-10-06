@@ -55,9 +55,22 @@ service cloud.firestore {
     //  Session helpers
     // ---------------------------------------------------------
 
-    // Has this user actually joined this session?
+    // Child documents can outlive their session (Firestore does not
+    // cascade deletes), so every player-facing child rule checks
+    // that the parent still exists. A closed room's leftovers are
+    // unreadable even if cleanup was interrupted.
+    function sessionExists(sid) {
+      return exists(/databases/$(database)/documents/sessions/$(sid));
+    }
+
+    function sessionData(sid) {
+      return get(/databases/$(database)/documents/sessions/$(sid)).data;
+    }
+
+    // Has this user actually joined this (still existing) session?
     function isMember(sid) {
       return isSignedIn()
+          && sessionExists(sid)
           && exists(/databases/$(database)/documents/sessions/$(sid)/players/$(request.auth.uid));
     }
 
@@ -65,7 +78,16 @@ service cloud.firestore {
     // "you cannot fetch the answer before the reveal" a database
     // fact rather than a UI promise.
     function phaseIs(sid, p) {
-      return get(/databases/$(database)/documents/sessions/$(sid)).data.currentPhase == p;
+      return sessionData(sid).currentPhase == p;
+    }
+
+    // Joining is only possible while the host is still gathering
+    // guests. The join screen checks this too, but a direct client
+    // request must be refused here, not there.
+    function lobbyIsOpen(sid) {
+      return sessionExists(sid)
+          && sessionData(sid).status == 'open'
+          && sessionData(sid).currentPhase == 'lobby';
     }
 
     // =========================================================
@@ -162,9 +184,20 @@ service cloud.firestore {
               && request.resource.data.name.size() <= 24;
         }
 
-        allow read: if isSignedIn();
-        allow create: if isSelf(playerId) && validNewPlayer();
-        allow update: if (isSelf(playerId) && validPlayerUpdate()) || isAdmin();
+        // Your own record, or the roster of a room you are in.
+        allow get:  if isAdmin()
+                    || (isSelf(playerId) && sessionExists(sessionId))
+                    || isMember(sessionId);
+        allow list: if isAdmin() || isMember(sessionId);
+
+        // No late joins: a phone cannot add itself once the host has
+        // dealt, so it can never qualify to vote or read the reveal.
+        // Overcrowding is handled by the host, who can remove guests
+        // from the lobby (delete is admin-only) and cannot deal more
+        // than the game's maximum.
+        allow create: if isSelf(playerId) && validNewPlayer() && lobbyIsOpen(sessionId);
+        allow update: if (isSelf(playerId) && sessionExists(sessionId) && validPlayerUpdate())
+                      || isAdmin();
         allow delete: if isAdmin();
       }
 
@@ -187,7 +220,7 @@ service cloud.firestore {
       //  themselves out of being the killer.
       // -------------------------------------------------------
       match /private/{playerId} {
-        allow get: if isSelf(playerId) || isAdmin();
+        allow get: if (isSelf(playerId) && sessionExists(sessionId)) || isAdmin();
         allow list: if isAdmin();
         allow create, update, delete: if isAdmin();
       }
@@ -197,29 +230,42 @@ service cloud.firestore {
       //
       //  Secret ballot. You see your own vote; you see everyone's
       //  only once the host reaches the reveal. Votes can only be
-      //  cast during the accusation phase, by a player who is
-      //  actually in the game, for themselves.
+      //  cast during the accusation phase, by a player who was
+      //  actually dealt a character, for themselves, naming another
+      //  character who is really in this game. Votes are final:
+      //  there is no update, matching the locked ballot in the UI.
       // -------------------------------------------------------
       match /votes/{playerId} {
 
+        // castIds is written into the session by the host when it
+        // deals. It holds character ids only (already public on the
+        // players documents), sorted, so it reveals no roles.
         function validVote() {
-          return request.resource.data.keys().hasOnly(['suspectId', 'castAt'])
-              && request.resource.data.suspectId is string
-              && request.resource.data.suspectId.size() <= 128;
+          let me      = get(/databases/$(database)/documents/sessions/$(sessionId)/players/$(request.auth.uid)).data;
+          let castIds = sessionData(sessionId).get('castIds', []);
+          let vote    = request.resource.data;
+          return vote.keys().hasOnly(['suspectId', 'castAt'])
+              && vote.keys().hasAll(['suspectId', 'castAt'])
+              && vote.suspectId is string
+              && vote.suspectId in castIds
+              && me.get('characterId', '') != ''
+              && vote.suspectId != me.characterId
+              && vote.castAt == request.time;
         }
 
-        allow get: if isSelf(playerId)
+        allow get: if (isSelf(playerId) && sessionExists(sessionId))
                    || isAdmin()
                    || (isMember(sessionId) && phaseIs(sessionId, 'reveal'));
 
         allow list: if isAdmin()
                     || (isMember(sessionId) && phaseIs(sessionId, 'reveal'));
 
-        allow create, update: if isSelf(playerId)
-                              && isMember(sessionId)
-                              && phaseIs(sessionId, 'accusation')
-                              && validVote();
+        allow create: if isSelf(playerId)
+                      && isMember(sessionId)
+                      && phaseIs(sessionId, 'accusation')
+                      && validVote();
 
+        allow update: if false;
         allow delete: if isAdmin();
       }
 

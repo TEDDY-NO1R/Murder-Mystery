@@ -187,6 +187,18 @@ $('save-details').addEventListener('click', async () => {
     const min = Number($('f-min').value) || MIN_PLAYERS;
     const max = Number($('f-max').value) || MAX_PLAYERS;
     if (min > max) throw new Error('Minimum players cannot exceed maximum.');
+    if (min < MIN_PLAYERS || max > MAX_PLAYERS) {
+      throw new Error(`Player range must sit within ${MIN_PLAYERS}–${MAX_PLAYERS}.`);
+    }
+
+    // The solution must name the story's KILLER. Anything else and
+    // the ending players read would contradict the card that was
+    // dealt. The host refuses to deal such a story as well.
+    const killerId = $('f-killer').value;
+    const named = state.chars.find(c => c.id === killerId);
+    if (killerId && named?.role !== ROLES.KILLER) {
+      throw new Error(`The solution must name the KILLER character — "${named?.name || killerId}" is ${named?.role || 'not a character'}.`);
+    }
 
     await updateDoc(paths.story(state.id), {
       title:         $('f-title').value.trim(),
@@ -199,7 +211,7 @@ $('save-details').addEventListener('click', async () => {
       source:        $('f-source').value.trim(),
       status:        $('f-status').value,
       solution: {
-        killerId: $('f-killer').value,
+        killerId,
         headline: $('f-headline').value.trim(),
         method:   $('f-method').value.trim(),
         motive:   $('f-motive').value.trim(),
@@ -259,9 +271,12 @@ function castProblems() {
   if (n(ROLES.ACCOMPLICE) > 1)  out.push('At most 1 accomplice.');
   const max = state.story?.maxPlayers || MAX_PLAYERS;
   if (state.chars.length < max) out.push(`${state.chars.length} characters for ${max} max players.`);
+  const noRole = state.chars.filter(c => !Object.values(ROLES).includes(c.role)).length;
+  if (noRole) out.push(`${noRole} character${noRole === 1 ? ' has' : 's have'} no role.`);
   const killer = state.chars.find(c => c.role === ROLES.KILLER);
   const solId = state.story?.solution?.killerId;
   if (killer && solId && killer.id !== solId) out.push('Solution killer does not match the KILLER character.');
+  if (out.length) out.push('The host may refuse to deal this story until these are fixed.');
   return out;
 }
 

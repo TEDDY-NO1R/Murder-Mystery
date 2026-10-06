@@ -211,7 +211,9 @@ stories/{storyId}/phases/{phaseId}
 sessions/{ROOMCODE}                    doc id IS the room code
   roomCode, storyId, storyTitle, storySynopsis,
   status ('open'|'live'|'ended'), currentPhase,
-  revealedClues[], hostUid, createdAt
+  revealedClues[], hostUid, createdAt,
+  castIds[] (sorted dealt character ids, written at start — the rules
+  check votes against it), startedAt
 
 sessions/{ROOMCODE}/players/{uid}      public in-game
   name, joinedAt, characterId, characterName   (never role)
@@ -219,7 +221,7 @@ sessions/{ROOMCODE}/players/{uid}      public in-game
 sessions/{ROOMCODE}/private/{uid}      readable only by that uid
   characterId, role, name, title + role-appropriate fields
 
-sessions/{ROOMCODE}/votes/{uid}        suspectId, castAt
+sessions/{ROOMCODE}/votes/{uid}        suspectId, castAt   (create-only: final)
 sessions/{ROOMCODE}/reveal/summary     killerId, headline, method,
                                        motive, epilogue, cast[]
 ```
@@ -253,6 +255,31 @@ Accomplice, 6–8 add Suspects. See `rolesForPlayerCount()` in
   characters and phases; `js/admin.js` deletes children explicitly.
 - **Netlify `_redirects` needs `!` to shadow a real file.** Without the
   force flag the static file is served and the rule ignored.
+
+---
+
+## Audit fixes — 6 Oct 2026
+
+The 14 Sep audit's code findings are fixed. The new `firestore.rules`
+was republished on 6 Oct 2026. **The code changes are local only until
+pushed to GitHub / redeployed to Netlify.**
+
+- Joining is refused by the rules once the lobby closes; the host can
+  remove guests from the lobby.
+- Closing a room deletes every child document, then the session; new
+  rooms clear any leftovers under their code. Player reads of children
+  require the session to exist.
+- Player and host pages fully reset between rooms (envelope, vote,
+  reveal, notes, cast, spoiler).
+- The host refuses to deal a story without exactly one killer and one
+  detective, with role-less characters, or whose solution names someone
+  other than the killer. The editor blocks saving such a solution.
+- Votes are final, must name another dealt character, and need a
+  server timestamp.
+- `play.html` refuses to run under a host login.
+
+Still open: the seed files (above), and a full multi-device test game
+against the republished rules.
 
 ---
 
