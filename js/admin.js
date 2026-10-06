@@ -2,17 +2,12 @@
 //  MURDER MYSTERY — story editor
 // ============================================================
 //
-//  CRUD over /stories and its two subcollections. Every path in
-//  this file is admin-only, so the whole page is unreachable
-//  without a real email/password login — an anonymous player
-//  token gets permission-denied on the very first read and is
-//  bounced to the login page.
+//  CRUD over /stories and its two subcollections. Writing any of
+//  them needs the story-editor login on the allowlist in
+//  firestore.rules; anyone else is bounced to the login page.
 //
-//  It also carries the one-off converter for the legacy shape,
-//  where characters were an array field inside the story
-//  document. That shape cannot be secured at all: Firestore
-//  returns whole documents or nothing, so anyone allowed to read
-//  the title also receives every secret. Converting is the fix.
+//  Only stories with status "published" appear in the host's
+//  story list on the home page.
 // ============================================================
 
 import {
@@ -92,14 +87,7 @@ function renderStoryList() {
     nm.textContent = s.title || s.id;
     li.appendChild(nm);
 
-    // A story still holding a characters array is the insecure
-    // shape — flag it in the list, not just once it's opened.
-    if (Array.isArray(s.characters)) {
-      const warn = document.createElement('span');
-      warn.className = 'prole KILLER';
-      warn.textContent = 'legacy';
-      li.appendChild(warn);
-    } else if (s.status) {
+    if (s.status) {
       const st = document.createElement('span');
       st.className = 'prole';
       st.textContent = s.status;
@@ -136,7 +124,6 @@ async function selectStory(id) {
 
     $('editor').hidden = false;
     $('editing-id').textContent = id;
-    $('legacy').hidden = !Array.isArray(state.story.characters);
 
     renderDetails();
     renderChars();
@@ -523,57 +510,6 @@ $('delete-story').addEventListener('click', async () => {
 });
 
 // ------------------------------------------------------------
-//  Legacy converter
-//
-//  Moves characters[] out of the story document and into the
-//  subcollection, then removes the array field. This is the fix
-//  for the shape that leaked — while the array exists, anyone who
-//  can read the story document receives every secret in it.
-// ------------------------------------------------------------
-
-$('convert-btn').addEventListener('click', async () => {
-  const arr = state.story?.characters;
-  if (!Array.isArray(arr) || !arr.length) { toast('Nothing to convert.', true); return; }
-  if (!confirm(`Move ${arr.length} characters into the subcollection and delete the array?`)) return;
-
-  const btn = $('convert-btn');
-  btn.disabled = true;
-  try {
-    const batch = writeBatch(db);
-    const used = new Set();
-
-    arr.forEach((c, i) => {
-      // Derive a stable document id from the character's name.
-      let id = String(c.name || `character-${i + 1}`)
-        .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
-      if (!id) id = `character-${i + 1}`;
-      while (used.has(id)) id = `${id}-${i + 1}`;
-      used.add(id);
-
-      batch.set(paths.character(id, state.id), {
-        order: i + 1,
-        // Legacy `role` holds flavour text ("The Analytical Detective"),
-        // not a mechanical role. Preserve it as the title and leave the
-        // real role unset so it has to be chosen deliberately.
-        role: Object.values(ROLES).includes(c.role) ? c.role : '',
-        title: Object.values(ROLES).includes(c.role) ? '' : (c.role || ''),
-        name: c.name || '',
-        bio: c.bio || '',
-        secret: c.secret || '',
-        objective: c.objective || ''
-      });
-    });
-
-    batch.update(paths.story(state.id), { characters: deleteField() });
-    await batch.commit();
-
-    await loadStories();
-    await selectStory(state.id);
-    toast(`Converted ${arr.length} characters. Set each one's role.`);
-  } catch (ex) { fail(ex); btn.disabled = false; }
-});
-
-// ------------------------------------------------------------
 //  Start
 // ------------------------------------------------------------
 
@@ -600,7 +536,8 @@ $('convert-btn').addEventListener('click', async () => {
     await loadStories();
     $('boot').hidden = true;
   } catch (ex) {
-    // A player token reaching this page lands here.
+    // Stories are readable by any signed-in account, so this is rare;
+    // an account missing from the allowlist fails on save instead.
     $('boot').textContent = describeError(ex);
     if (ex?.code === 'permission-denied') {
       $('boot').textContent += ' This account is not in the admin list in firestore.rules.';

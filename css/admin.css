@@ -1,8 +1,7 @@
 /* ============================================================
-   MURDER MYSTERY — host & admin surfaces
-   Desktop-first control panel. Same palette as the player
-   client, but denser: this is read at arm's length on a laptop
-   while running a room, not held close in the dark.
+   MURDER MYSTERY — story editor, editor sign-in, seed page
+   Desktop-first. Same palette as the player client, but denser:
+   this is read at a desk, not held close in the dark.
    ============================================================ */
 
 :root {
@@ -60,7 +59,6 @@ body {
 }
 @media (min-width: 60rem) {
   .cols { grid-template-columns: 20rem minmax(0, 1fr); align-items: start; }
-  .cols.wide { grid-template-columns: 22rem minmax(0, 1fr); }
 }
 
 /* ── Panels ──────────────────────────────────────────────── */
@@ -88,26 +86,10 @@ h2.display { font: 700 1.5rem/1.15 var(--display); margin: 0 0 .5rem; }
 .dim   { color: var(--smoke); }
 .small { font-size: .875rem; }
 .error { color: #d4736f; font-size: .9375rem; margin: .75rem 0 0; }
-.ok    { color: #7fa650; }
 
 hr.rule {
   border: 0; height: 1px; margin: 1.25rem 0;
   background: linear-gradient(90deg, transparent, var(--hairline) 10%, var(--hairline) 90%, transparent);
-}
-
-/* ── Room code ───────────────────────────────────────────── */
-
-.roomcode {
-  font: 700 clamp(2.5rem, 9vw, 4rem)/1 var(--display);
-  letter-spacing: .18em;
-  color: var(--parchment);
-  margin: 0;
-  text-indent: .18em;
-  user-select: all;
-}
-.roomcode-label {
-  font-size: .75rem; letter-spacing: .18em; text-transform: uppercase;
-  color: var(--gold); margin: 0 0 .375rem;
 }
 
 /* ── Buttons ─────────────────────────────────────────────── */
@@ -161,7 +143,7 @@ textarea { resize: vertical; min-height: 6rem; line-height: 1.65; }
 
 .login { max-width: 24rem; margin: 12vh auto 0; }
 
-/* ── Player roster ───────────────────────────────────────── */
+/* ── Story and character lists ───────────────────────────── */
 
 .roster { list-style: none; margin: 0; padding: 0; }
 .roster li {
@@ -183,7 +165,7 @@ textarea { resize: vertical; min-height: 6rem; line-height: 1.65; }
 
 .empty { color: var(--smoke); font-style: italic; padding: .5rem 0; }
 
-/* ── Phase stepper ───────────────────────────────────────── */
+/* ── Editor tabs ─────────────────────────────────────────── */
 
 .phases { list-style: none; margin: 0 0 1.25rem; padding: 0; display: flex; flex-wrap: wrap; gap: .375rem; }
 .phases li {
@@ -196,9 +178,8 @@ textarea { resize: vertical; min-height: 6rem; line-height: 1.65; }
 .phases li.done { color: var(--smoke); opacity: .5; }
 .phases li.now  { border-color: var(--gold); color: var(--gold); background: rgba(200,168,75,.1); }
 
-/* ── Clue list ───────────────────────────────────────────── */
+/* ── Clue editor ─────────────────────────────────────────── */
 
-.clues { list-style: none; margin: 0; padding: 0; }
 .clue {
   display: grid;
   grid-template-columns: minmax(0,1fr) auto;
@@ -208,10 +189,6 @@ textarea { resize: vertical; min-height: 6rem; line-height: 1.65; }
   border-bottom: 1px solid rgba(107,99,85,.16);
 }
 .clue:last-child { border-bottom: 0; }
-.clue h4 { font: 700 1.0625rem/1.3 var(--display); margin: 0 0 .25rem; }
-.clue p  { margin: 0; color: #b3a68a; font-size: .9375rem; }
-.clue.is-out h4 { color: var(--smoke); }
-.clue.is-out p  { color: var(--smoke); opacity: .7; }
 
 .phase-group {
   font-size: .6875rem; letter-spacing: .18em; text-transform: uppercase;
@@ -221,26 +198,6 @@ textarea { resize: vertical; min-height: 6rem; line-height: 1.65; }
   border-top: 1px solid var(--hairline);
 }
 .phase-group:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
-
-/* ── Votes ───────────────────────────────────────────────── */
-
-.tally { list-style: none; margin: 0; padding: 0; }
-.tally li { display: flex; align-items: center; gap: .75rem; padding: .5rem 0; }
-.tally .bar {
-  flex: 1;
-  height: 6px;
-  background: rgba(245,233,201,.08);
-  border-radius: 100px;
-  overflow: hidden;
-}
-.tally .bar span { display: block; height: 100%; background: var(--blood); }
-.tally .n { color: var(--smoke); font-size: .875rem; min-width: 1.5rem; text-align: right; }
-
-/* ── Spoiler block ───────────────────────────────────────── */
-
-.spoiler { position: relative; }
-.spoiler.is-hidden .spoiler-body { filter: blur(9px); opacity: .55; pointer-events: none; user-select: none; }
-.spoiler-body { transition: filter .2s, opacity .2s; }
 
 /* ── Toast ───────────────────────────────────────────────── */
 

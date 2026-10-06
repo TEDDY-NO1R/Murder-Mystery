@@ -190,9 +190,8 @@ function syncHostOpen() {
   $('#host-open').disabled = !pickedStory || !$('#host-name').value.trim();
 }
 
-// Only stories the editor has published, in the subcollection
-// shape. The picker shows title, blurb and table size — nothing
-// from inside the story.
+// Only stories the editor has published. The picker shows title,
+// blurb and table size — nothing from inside the story.
 async function loadStories() {
   const list = $('#story-list');
   $('#story-loading').hidden = false;
@@ -201,7 +200,7 @@ async function loadStories() {
     const snap = await getDocs(paths.stories());
     state.stories = snap.docs
       .map(d => ({ id: d.id, ...d.data() }))
-      .filter(s => s.status === 'published' && !Array.isArray(s.characters))
+      .filter(s => s.status === 'published')
       .sort((a, b) => (a.title || a.id).localeCompare(b.title || b.id));
   } catch (err) {
     state.stories = [];
@@ -1185,6 +1184,11 @@ async function renderReveal() {
       const mine = await getDoc(paths.player(last, state.uid));
       if (mine.exists()) { await attach(last); return; }
     } catch { /* room gone — fall through to join */ }
+    // The room ended while this phone was away: drop its notes and
+    // envelope flags too, in case the code is ever reused.
+    state.code = last;
+    forgetRoom();
+    state.code = null;
     localStorage.removeItem(LAST);
   }
 

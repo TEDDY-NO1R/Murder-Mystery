@@ -1,8 +1,8 @@
 # Murder Mystery
 
 > **Picking this up fresh?** Read **[HANDOFF.md](HANDOFF.md)** first — it has
-> the current status, the one remaining blocker, and where to find the files
-> that are deliberately not in this repo.
+> the current status, how a game runs, and where to find the files that are
+> deliberately not in this repo.
 
 A murder mystery party game for people sitting in the same room.
 
@@ -37,7 +37,7 @@ for everyone by getting it wrong.
 Phases run `lobby → arrival → investigation → confrontation → accusation →
 reveal`, advanced by the host, never on a timer.
 
-## Secrets — honour system (since Oct 2026)
+## Secrets — honour system
 
 Anyone can host, and the host plays too, so the host's phone does the
 dealing. To deal, it must read the story — so **story data is readable by
@@ -68,7 +68,7 @@ Firebase v10 via CDN modules for Firestore and Auth; deployed on Netlify with
 an empty build command.
 
 Setup lives in [SETUP.md](SETUP.md) — Firebase project, security rules,
-seeding and deployment, in order.
+deployment and seeding, in order.
 
 > `js/admin-seed.js` is deliberately not in this repository: the repo is
 > public and that file is the whole story, ending included. It is a one-time

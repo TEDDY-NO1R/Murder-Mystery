@@ -42,22 +42,6 @@
     <!-- Editor -->
     <div id="editor" hidden>
 
-      <!-- Legacy shape warning -->
-      <div class="panel" id="legacy" hidden style="border-color:rgba(139,26,26,.5)">
-        <p class="panel-title" style="color:#d4736f">Insecure shape</p>
-        <p class="small">
-          This story keeps its characters in an <strong>array inside the story
-          document</strong>. Firestore returns whole documents or nothing, so no
-          security rule can show the title while hiding the secrets in the same
-          document. Converting moves each character into the
-          <code>characters</code> subcollection, where they can be locked
-          individually.
-        </p>
-        <div class="btn-row" style="margin-top:1rem">
-          <button class="btn danger" id="convert-btn">Convert to subcollection</button>
-        </div>
-      </div>
-
       <div class="panel">
         <p class="panel-title">
           <span id="editing-id" class="mono"></span>
@@ -122,8 +106,8 @@
         <section data-panel="characters" hidden>
           <p class="small dim" style="margin-top:0">
             Each character becomes one document under
-            <code>characters/</code>, readable only by you and by the host
-            browser that deals it.
+            <code>characters/</code>. The host's phone reads them to deal the
+            cards, but never shows them on screen.
           </p>
 
           <ul class="roster" id="char-list"></ul>
@@ -185,8 +169,8 @@
         <!-- ── Clues ── -->
         <section data-panel="clues" hidden>
           <p class="small dim" style="margin-top:0">
-            Clue text lives here and is copied into a session only at the moment
-            the host releases it.
+            Clue text lives here and is copied into a game only at the moment
+            the host releases it — in this order, without the host seeing it first.
           </p>
           <div id="clue-editor"></div>
           <div class="btn-row" style="margin-top:1.5rem">

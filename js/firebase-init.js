@@ -72,8 +72,6 @@ export {
 //  reading the rulebook, not the solution.
 // ============================================================
 
-export const STORY_ID = 'speckled-band';
-
 // Ordered. The host walks this list one step at a time.
 export const PHASES = [
   { id: 'lobby',         label: 'Gathering',     blurb: 'Waiting for guests to arrive.' },
@@ -194,10 +192,6 @@ export function waitForAuth() {
   });
 }
 
-export function isAnonymousUser(user = auth.currentUser) {
-  return !!user && user.isAnonymous;
-}
-
 // ============================================================
 //  ERROR MESSAGES
 //
@@ -252,11 +246,11 @@ if (IS_FILE_PROTOCOL) {
 
 export const paths = {
   stories:    () => collection(db, 'stories'),
-  story:      (storyId = STORY_ID) => doc(db, 'stories', storyId),
-  characters: (storyId = STORY_ID) => collection(db, 'stories', storyId, 'characters'),
-  character:  (charId, storyId = STORY_ID) => doc(db, 'stories', storyId, 'characters', charId),
-  storyPhases:(storyId = STORY_ID) => collection(db, 'stories', storyId, 'phases'),
-  storyPhase: (phaseId, storyId = STORY_ID) => doc(db, 'stories', storyId, 'phases', phaseId),
+  story:      (storyId) => doc(db, 'stories', storyId),
+  characters: (storyId) => collection(db, 'stories', storyId, 'characters'),
+  character:  (charId, storyId) => doc(db, 'stories', storyId, 'characters', charId),
+  storyPhases:(storyId) => collection(db, 'stories', storyId, 'phases'),
+  storyPhase: (phaseId, storyId) => doc(db, 'stories', storyId, 'phases', phaseId),
 
   session:    (code) => doc(db, 'sessions', code),
   players:    (code) => collection(db, 'sessions', code, 'players'),
