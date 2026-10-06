@@ -98,8 +98,10 @@ public) and `_redirects` 404s it on Netlify.
 3. Click **Seed "The Speckled Band"**. The page shows counts only, never
    story text, so whoever seeds can still play.
 
-Run it once — running it again replaces the story and discards any edits
-made in the story editor. Opening a story in `admin/story.html` shows every
+It writes the story (id `the-speckled-band`) with its characters, clues
+and searchable rooms. Running it again replaces the story and discards any
+edits made in the story editor. Rooms can't yet be edited in the editor —
+change them in the seed file and seed again. Opening a story in `admin/story.html` shows every
 secret; don't, if you want to play it.
 
 New stories can also be written directly in `admin/story.html`. Only
@@ -136,7 +138,11 @@ stories with status **published** appear in the host's list.
    opens that player's card.
 5. The host's bar releases clues one at a time (unseen until released) and
    moves to the next phase. Every phone updates live.
-6. At **Accusation** everyone votes; the bar counts how many have.
+6. In arrival, investigation and confrontation, everyone uses the
+   **Search** tab to search one room per round. Finds are private until
+   their finder taps **Show the table**. The host's bar counts how many
+   have searched, so they know when to move on.
+7. At **Accusation** everyone votes; the bar counts how many have.
    **Reveal the truth** opens everything up. **Close room** ends it.
 
 The detective accuses correctly → the innocents win. Wrong → the killer

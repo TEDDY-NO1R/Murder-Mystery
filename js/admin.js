@@ -492,13 +492,14 @@ $('new-btn').addEventListener('click', async () => {
 
 $('delete-story').addEventListener('click', async () => {
   if (!state.id) return;
-  if (!confirm(`Delete "${state.id}" and all its characters and clues?`)) return;
+  if (!confirm(`Delete "${state.id}" and all its characters, clues and rooms?`)) return;
   try {
     // Firestore does not cascade. Remove the children first or they
     // become orphans that still cost storage.
     const batch = writeBatch(db);
     (await getDocs(paths.characters(state.id))).docs.forEach(d => batch.delete(d.ref));
     (await getDocs(paths.storyPhases(state.id))).docs.forEach(d => batch.delete(d.ref));
+    (await getDocs(paths.locations(state.id))).docs.forEach(d => batch.delete(d.ref));
     batch.delete(paths.story(state.id));
     await batch.commit();
 

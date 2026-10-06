@@ -157,6 +157,7 @@
 
     <nav class="tabs" role="tablist">
       <button class="tab is-on" data-tab="clues" role="tab">Clues <span class="badge" id="clue-count">0</span></button>
+      <button class="tab" data-tab="search" role="tab" id="search-tab" hidden>Search <span class="badge" id="search-badge" data-zero></span></button>
       <button class="tab" data-tab="you" role="tab">Your card</button>
       <button class="tab" data-tab="notes" role="tab">Notes</button>
     </nav>
@@ -165,6 +166,22 @@
       <div class="tab-panel is-on" data-panel="clues">
         <ul class="clue-feed" id="clue-feed"></ul>
         <p class="waiting" id="clue-empty"><span class="pulse"></span> No clues released yet</p>
+      </div>
+
+      <!-- Search the house: one room per round. What you find is
+           yours alone until you choose to show it. -->
+      <div class="tab-panel" data-panel="search">
+        <p class="eyebrow">Search the house</p>
+        <p class="search-status" id="search-status"></p>
+
+        <div class="find-result" id="search-result" hidden></div>
+
+        <ul class="rooms" id="rooms"></ul>
+        <p class="error" id="search-error" role="alert" hidden></p>
+
+        <p class="eyebrow evidence-head">Your evidence <span class="dim" id="evidence-count"></span></p>
+        <ul class="evidence" id="evidence"></ul>
+        <p class="hint quiet" id="evidence-empty">Nothing yet. Only you can see what you find — show it to the table, keep it, or lie about it.</p>
       </div>
 
       <div class="tab-panel" data-panel="you">

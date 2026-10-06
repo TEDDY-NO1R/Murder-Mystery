@@ -84,6 +84,10 @@ export const PHASES = [
 
 export const PHASE_IDS = PHASES.map(p => p.id);
 
+// Rounds in which every dealt player may search one room of the
+// house. Must match canSearchNow() in firestore.rules.
+export const SEARCH_PHASES = ['arrival', 'investigation', 'confrontation'];
+
 export function nextPhase(current) {
   const i = PHASE_IDS.indexOf(current);
   return (i === -1 || i === PHASE_IDS.length - 1) ? null : PHASE_IDS[i + 1];
@@ -251,6 +255,8 @@ export const paths = {
   character:  (charId, storyId) => doc(db, 'stories', storyId, 'characters', charId),
   storyPhases:(storyId) => collection(db, 'stories', storyId, 'phases'),
   storyPhase: (phaseId, storyId) => doc(db, 'stories', storyId, 'phases', phaseId),
+  locations:  (storyId) => collection(db, 'stories', storyId, 'locations'),
+  location:   (locId, storyId) => doc(db, 'stories', storyId, 'locations', locId),
 
   session:    (code) => doc(db, 'sessions', code),
   players:    (code) => collection(db, 'sessions', code, 'players'),
@@ -259,5 +265,14 @@ export const paths = {
   private:    (code, uid) => doc(db, 'sessions', code, 'private', uid),
   votes:      (code) => collection(db, 'sessions', code, 'votes'),
   vote:       (code, uid) => doc(db, 'sessions', code, 'votes', uid),
-  reveal:     (code) => doc(db, 'sessions', code, 'reveal', 'summary')
+  reveal:     (code) => doc(db, 'sessions', code, 'reveal', 'summary'),
+
+  // Searching the house: who searched where (public), which piece of
+  // evidence each player holds (claims), and evidence shown to the table.
+  searches:   (code) => collection(db, 'sessions', code, 'searches'),
+  search:     (code, id) => doc(db, 'sessions', code, 'searches', id),
+  finds:      (code) => collection(db, 'sessions', code, 'finds'),
+  find:       (code, findId) => doc(db, 'sessions', code, 'finds', findId),
+  shared:     (code) => collection(db, 'sessions', code, 'shared'),
+  share:      (code, findId) => doc(db, 'sessions', code, 'shared', findId)
 };

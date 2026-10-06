@@ -25,7 +25,7 @@ import {
   db, paths, getDoc, setDoc, updateDoc, deleteDoc, getDocs, onSnapshot,
   serverTimestamp, writeBatch, arrayUnion,
   normaliseRoomCode, generateRoomCode, CODE_LENGTH,
-  PHASE_IDS, phaseMeta, nextPhase,
+  PHASE_IDS, SEARCH_PHASES, phaseMeta, nextPhase,
   ROLES, ROLE_FIELDS, rolesForPlayerCount, MIN_PLAYERS, MAX_PLAYERS,
   IS_FILE_PROTOCOL
 } from './firebase-init.js';
@@ -49,10 +49,21 @@ const state = {
   voteCount: 0,      // host only: how many have accused (not for whom)
   hostClues: null,   // host only: the story's clues, in release order — never rendered
   stories:   [],     // the story picker
-  closing:   false   // host pressed "Close room"
+  closing:   false,  // host pressed "Close room"
+
+  // Searching the house
+  locations: null,   // the story's rooms, loaded once the game starts — only your own finds are ever rendered
+  searches:  [],     // who searched where, every round (public)
+  claims:    {},     // findId → uid of the player holding it
+  shared:    [],     // evidence shown to the table
+  lastResult: null,  // what your most recent search turned up
+  searching: false
 };
 
-const unsub = { session: null, players: null, card: null, votes: null };
+const unsub = {
+  session: null, players: null, card: null, votes: null,
+  searches: null, finds: null, shared: null
+};
 
 let picked = null;       // ballot choice not yet submitted
 let pickedStory = null;  // story chosen on the host screen
@@ -338,9 +349,39 @@ async function attach(code) {
       state.session = snap.data();
       state.isHost = state.session.hostUid === state.uid;
       if (state.isHost) watchVotes(code);
+      if (state.session.status !== 'open' && state.locations === null) loadLocations();
       renderSession();
       renderLobby();
+      renderSearch();
       route();
+    },
+    err => lost(err)
+  );
+
+  unsub.searches = onSnapshot(paths.searches(code),
+    snap => {
+      state.searches = snap.docs.map(d => d.data());
+      renderSearch();
+      renderHostControls();
+    },
+    err => lost(err)
+  );
+
+  unsub.finds = onSnapshot(paths.finds(code),
+    snap => {
+      state.claims = Object.fromEntries(snap.docs.map(d => [d.id, d.data().uid]));
+      renderSearch();
+    },
+    err => lost(err)
+  );
+
+  unsub.shared = onSnapshot(paths.shared(code),
+    snap => {
+      state.shared = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => (a.at?.seconds || 0) - (b.at?.seconds || 0));
+      renderClues();
+      renderSearch();
     },
     err => lost(err)
   );
@@ -364,6 +405,7 @@ async function attach(code) {
     snap => {
       state.card = snap.exists() ? snap.data() : null;
       renderCard();
+      renderSearch();
       route();
     },
     err => lost(err)
@@ -429,8 +471,22 @@ function resetRoomState() {
   state.voteCount = 0;
   state.hostClues = null;
   state.closing = false;
+  state.locations = null;
+  state.searches = [];
+  state.claims = {};
+  state.shared = [];
+  state.lastResult = null;
+  state.searching = false;
   picked = null;
   revealed = false;
+
+  ['#rooms', '#evidence', '#search-result'].forEach(sel => { $(sel).innerHTML = ''; });
+  $('#search-result').dataset.key = '';
+  ['#search-status', '#evidence-count'].forEach(sel => { $(sel).textContent = ''; });
+  $('#search-result').hidden = true;
+  $('#search-error').hidden = true;
+  $('#search-tab').hidden = true;
+  $('#search-badge').toggleAttribute('data-zero', true);
 
   const env = $('#envelope');
   env.classList.remove('is-open');
@@ -596,36 +652,296 @@ function renderCard() {
   $('#game-whoami').textContent = state.card.name || 'Your card';
 }
 
+// The table's shared knowledge: clues the host released, then
+// evidence players chose to show, each marked with who showed it.
 function renderClues() {
   const clues = state.session?.revealedClues || [];
   const feed = $('#clue-feed');
+
+  // Unchanged feed: leave it alone rather than replaying every
+  // item's slide-in on each unrelated update.
+  const key = [...clues.map(c => c.id), ...state.shared.map(s => s.id)].join('|');
+  if (feed.dataset.key === key && feed.childElementCount) return;
+  feed.dataset.key = key;
   feed.innerHTML = '';
 
-  clues.forEach((clue, i) => {
+  const item = (label, title, text, shared) => {
     const li = document.createElement('li');
+    if (shared) li.className = 'is-shared';
 
     const n = document.createElement('p');
     n.className = 'clue-num';
-    n.textContent = `Clue ${i + 1}`;
+    n.textContent = label;
     li.appendChild(n);
 
     const t = document.createElement('h3');
     t.className = 'clue-title';
-    t.textContent = clue.title || '';
+    t.textContent = title || '';
     li.appendChild(t);
 
     const p = document.createElement('p');
     p.className = 'clue-text';
-    p.textContent = clue.text || '';
+    p.textContent = text || '';
     li.appendChild(p);
 
     feed.appendChild(li);
+  };
+
+  clues.forEach((clue, i) => item(`Clue ${i + 1}`, clue.title, clue.text, false));
+  state.shared.forEach(s => item(`Shown by ${s.name || 'a player'}`, s.title, s.text, true));
+
+  const total = clues.length + state.shared.length;
+  $('#clue-empty').hidden = total > 0;
+  const badge = $('#clue-count');
+  badge.textContent = total;
+  badge.toggleAttribute('data-zero', total === 0);
+}
+
+// ------------------------------------------------------------
+//  Search the house
+//
+//  One search per player per round. Each room holds evidence that
+//  appears round by round; whoever searches first takes the next
+//  piece, and later searchers find the room already gone through.
+//  Who searched where is public; what they found is not, unless
+//  they show it to the table.
+// ------------------------------------------------------------
+
+async function loadLocations() {
+  if (state.locations !== null || !state.session) return;
+  state.locations = [];            // mark as loading
+  const code = state.code;
+  try {
+    const snap = await getDocs(paths.locations(state.session.storyId));
+    if (state.code !== code) return;
+    state.locations = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (a.order || 99) - (b.order || 99));
+  } catch (err) {
+    console.error(err);
+  }
+  renderSearch();
+  renderHostControls();
+}
+
+const nameOf = uid => state.players.find(p => p.uid === uid)?.name || 'Someone';
+// Mid-sentence form: "You searched the doctor's study".
+const roomName = id => (state.locations?.find(l => l.id === id)?.name || 'a room').replace(/^The /, 'the ');
+
+// findId → { find, location } for this story
+function findIndex() {
+  const out = {};
+  (state.locations || []).forEach(loc => (loc.finds || []).forEach(f => { out[f.id] = { find: f, loc }; }));
+  return out;
+}
+
+function renderSearch() {
+  const has = !!state.locations?.length && !!state.card && !!state.session;
+  $('#search-tab').hidden = !has;
+  if (!has) return;
+
+  const phase = state.session.currentPhase;
+  const searchable = SEARCH_PHASES.includes(phase);
+  const mine = state.searches.find(s => s.uid === state.uid && s.phase === phase);
+  const canSearch = searchable && !mine && !state.searching;
+  const laterRound = SEARCH_PHASES.indexOf(phase) < SEARCH_PHASES.length - 1;
+
+  $('#search-badge').textContent = canSearch ? '1' : '';
+  $('#search-badge').toggleAttribute('data-zero', !canSearch);
+
+  $('#search-status').textContent = !searchable
+    ? 'The searching is over. Use what you know.'
+    : state.searching
+      ? 'Searching…'
+      : mine
+        ? `You searched ${roomName(mine.locationId)} this round. ${laterRound ? 'You can search again next round.' : 'That was your last search.'}`
+        : 'You may search one room this round. Choose carefully — whoever gets there first takes what is hidden.';
+
+  // Result of your latest search, for the round it happened in.
+  // Rebuilt only when it changes, so it doesn't re-animate every
+  // time someone else's search arrives.
+  const res = $('#search-result');
+  const r = state.lastResult;
+  const key = r && r.phase === phase ? `${r.phase}:${r.locationId}:${r.find?.id || ''}` : '';
+  res.hidden = !key;
+  if (res.dataset.key !== key) {
+    res.dataset.key = key;
+    res.innerHTML = '';
+  }
+  if (key && !res.firstChild) {
+    if (r.find) {
+      const card = document.createElement('div');
+      card.className = 'parchment';
+      const e = document.createElement('p');
+      e.className = 'eyebrow';
+      e.textContent = `Found in ${roomName(r.locationId)}`;
+      const h = document.createElement('h3');
+      h.className = 'clue-title';
+      h.style.color = 'var(--ink)';
+      h.textContent = r.find.title || '';
+      const p = document.createElement('p');
+      p.style.margin = '0';
+      p.textContent = r.find.text || '';
+      card.append(e, h, p);
+      res.appendChild(card);
+    } else {
+      const p = document.createElement('p');
+      p.className = 'nothing';
+      p.textContent = r.before.length
+        ? `Nothing new in ${roomName(r.locationId)}. ${r.before.join(' and ')} searched here before you.`
+        : `You search ${roomName(r.locationId)} thoroughly and find nothing of interest.`;
+      res.appendChild(p);
+    }
+  }
+
+  // Rooms, with public footprints.
+  const rooms = $('#rooms');
+  rooms.innerHTML = '';
+  state.locations.forEach(loc => {
+    const li = document.createElement('li');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.disabled = !canSearch;
+
+    const n = document.createElement('span');
+    n.className = 'room-name';
+    n.textContent = loc.name || loc.id;
+    btn.appendChild(n);
+
+    if (loc.blurb) {
+      const b = document.createElement('span');
+      b.className = 'room-blurb';
+      b.textContent = loc.blurb;
+      btn.appendChild(b);
+    }
+
+    const who = [...new Set(state.searches.filter(s => s.locationId === loc.id).map(s => nameOf(s.uid)))];
+    if (who.length) {
+      const st = document.createElement('span');
+      st.className = 'room-steps';
+      st.textContent = `Searched by ${who.join(', ')}`;
+      btn.appendChild(st);
+    }
+
+    btn.addEventListener('click', () => doSearch(loc));
+    li.appendChild(btn);
+    rooms.appendChild(li);
   });
 
-  $('#clue-empty').hidden = clues.length > 0;
-  const badge = $('#clue-count');
-  badge.textContent = clues.length;
-  badge.toggleAttribute('data-zero', clues.length === 0);
+  // Your evidence — the only finds this phone ever draws.
+  const idx = findIndex();
+  const shownIds = new Set(state.shared.map(s => s.id));
+  const myFinds = Object.entries(state.claims)
+    .filter(([, uid]) => uid === state.uid)
+    .map(([id]) => idx[id])
+    .filter(Boolean);
+
+  const list = $('#evidence');
+  list.innerHTML = '';
+  myFinds.forEach(({ find, loc }) => {
+    const li = document.createElement('li');
+
+    const w = document.createElement('p');
+    w.className = 'ev-where';
+    w.textContent = loc.name || loc.id;
+    const t = document.createElement('h3');
+    t.className = 'ev-title';
+    t.textContent = find.title || '';
+    const p = document.createElement('p');
+    p.className = 'ev-text';
+    p.textContent = find.text || '';
+    li.append(w, t, p);
+
+    if (shownIds.has(find.id)) {
+      const s = document.createElement('p');
+      s.className = 'ev-shown';
+      s.textContent = 'Shown to the table';
+      li.appendChild(s);
+    } else if (state.session.status === 'live') {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'btn';
+      b.textContent = 'Show the table';
+      b.addEventListener('click', () => showEvidence(find, b));
+      li.appendChild(b);
+    }
+    list.appendChild(li);
+  });
+  $('#evidence-count').textContent = myFinds.length ? `· ${myFinds.length}` : '';
+  $('#evidence-empty').hidden = myFinds.length > 0;
+}
+
+async function doSearch(loc) {
+  if (state.searching) return;
+  if (!confirm(`Search ${roomName(loc.id)}? You get one search this round.`)) return;
+
+  const code = state.code;
+  const phase = state.session.currentPhase;
+  const now = PHASE_IDS.indexOf(phase);
+  const before = [...new Set(state.searches
+    .filter(s => s.locationId === loc.id && s.uid !== state.uid)
+    .map(s => nameOf(s.uid)))];
+
+  state.searching = true;
+  $('#search-error').hidden = true;
+  renderSearch();
+
+  try {
+    let found = null;
+    // Two tries: if someone claims the same piece a moment before
+    // us, the rules refuse our batch and we take the next one.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const claimed = attempt === 0
+        ? new Set(Object.keys(state.claims))
+        : new Set((await getDocs(paths.finds(code))).docs.map(d => d.id));
+      found = (loc.finds || []).find(f =>
+        PHASE_IDS.indexOf(f.phase || 'arrival') <= now && !claimed.has(f.id)) || null;
+
+      const batch = writeBatch(db);
+      batch.set(paths.search(code, `${state.uid}_${phase}`), {
+        uid: state.uid, locationId: loc.id, phase, findId: found ? found.id : null, at: serverTimestamp()
+      });
+      if (found) {
+        batch.set(paths.find(code, found.id), {
+          uid: state.uid, locationId: loc.id, phase, at: serverTimestamp()
+        });
+      }
+      try {
+        await batch.commit();
+        break;
+      } catch (ex) {
+        if (attempt === 1 || ex.code !== 'permission-denied') throw ex;
+      }
+    }
+    if (state.code !== code) return;
+    state.lastResult = { phase, locationId: loc.id, find: found, before };
+  } catch (ex) {
+    const el = $('#search-error');
+    el.textContent = ex.code ? describeError(ex) : ex.message;
+    el.hidden = false;
+  } finally {
+    state.searching = false;
+    renderSearch();
+  }
+}
+
+async function showEvidence(find, btn) {
+  if (!confirm('Show this to everyone? It will appear in every player\'s clue feed.')) return;
+  btn.disabled = true;
+  try {
+    await setDoc(paths.share(state.code, find.id), {
+      uid: state.uid,
+      name: nameOf(state.uid),
+      title: find.title || '',
+      text: find.text || '',
+      at: serverTimestamp()
+    });
+  } catch (ex) {
+    btn.disabled = false;
+    const el = $('#search-error');
+    el.textContent = ex.code ? describeError(ex) : ex.message;
+    el.hidden = false;
+  }
 }
 
 // ------------------------------------------------------------
@@ -666,10 +982,13 @@ function renderHostControls() {
   const dealt = state.players.filter(p => p.characterId).length;
   const left = cluesLeft();
 
-  let status = phaseMeta(phase).label;
-  if (phase === 'accusation') status += ` · ${state.voteCount} of ${dealt} have accused`;
-  else if (phase !== 'reveal' && left !== null) status += ` · ${left} clue${left === 1 ? '' : 's'} left to release`;
-  $('#hb-status').textContent = status;
+  const parts = [phaseMeta(phase).label];
+  if (phase === 'accusation') parts.push(`${state.voteCount} of ${dealt} have accused`);
+  else if (phase !== 'reveal' && left !== null) parts.push(`${left} clue${left === 1 ? '' : 's'} to release`);
+  if (SEARCH_PHASES.includes(phase) && state.locations?.length) {
+    parts.push(`${state.searches.filter(s => s.phase === phase).length} of ${dealt} searched`);
+  }
+  $('#hb-status').textContent = parts.join(' · ');
 
   const clueBtn = $('#hb-clue');
   clueBtn.hidden = phase === 'reveal';
@@ -799,7 +1118,8 @@ async function removePlayer(p, btn) {
 // nothing of it is left behind.
 async function purgeRoom(code, { andSession = false } = {}) {
   const refs = [];
-  for (const col of [paths.players(code), paths.privates(code), paths.votes(code)]) {
+  for (const col of [paths.players(code), paths.privates(code), paths.votes(code),
+                     paths.searches(code), paths.finds(code), paths.shared(code)]) {
     (await getDocs(col)).docs.forEach(d => refs.push(d.ref));
   }
   refs.push(paths.reveal(code));          // deleting a missing doc is a no-op

@@ -37,6 +37,12 @@ for everyone by getting it wrong.
 Phases run `lobby → arrival → investigation → confrontation → accusation →
 reveal`, advanced by the host, never on a timer.
 
+**Search the house.** In arrival, investigation and confrontation, every
+player searches one room of the house per round. What you find is yours
+alone — show it to the table, keep it quiet, or lie about it. Whoever
+searches a room first takes the next piece of evidence there; anyone after
+finds it already gone through, and everyone can see who searched where.
+
 ## Secrets — honour system
 
 Anyone can host, and the host plays too, so the host's phone does the

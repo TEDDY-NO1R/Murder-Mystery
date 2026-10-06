@@ -20,7 +20,9 @@ rules_version = '2';
 //    - a player's card is fetched only by that player (the host
 //      writes it but the screen never shows it);
 //    - joining only while the lobby is open, one final vote per
-//      dealt player, and the ending is unreadable before 'reveal'.
+//      dealt player, and the ending is unreadable before 'reveal';
+//    - one search per player per round, each find claimed once,
+//      and only its finder can show it to the table.
 // ============================================================
 
 service cloud.firestore {
@@ -126,6 +128,12 @@ service cloud.firestore {
       }
 
       match /phases/{phaseId} {
+        allow read: if isSignedIn();
+        allow write: if isAdmin();
+      }
+
+      // Rooms of the house and the evidence hidden in each.
+      match /locations/{locationId} {
         allow read: if isSignedIn();
         allow write: if isAdmin();
       }
@@ -292,6 +300,70 @@ service cloud.firestore {
         allow read: if isAdmin()
                     || (isMember(sessionId) && phaseIs(sessionId, 'reveal'));
         allow write: if controls(sessionId);
+      }
+
+      // -------------------------------------------------------
+      //  Searching the house
+      //
+      //  searches/{uid}_{phase} — who searched which room in which
+      //    round. One per player per round (the id enforces it),
+      //    public to the table. Says nothing about what was found.
+      //  finds/{findId} — which player holds each piece of
+      //    evidence. Create-only, so a find can be claimed once;
+      //    written in the same batch as the search that found it.
+      //  shared/{findId} — evidence its finder chose to show the
+      //    whole table.
+      // -------------------------------------------------------
+
+      // Must match SEARCH_PHASES in js/firebase-init.js.
+      function canSearchNow(phase) {
+        return phase in ['arrival', 'investigation', 'confrontation']
+            && sessionData(sessionId).currentPhase == phase;
+      }
+
+      function isDealt() {
+        return get(/databases/$(database)/documents/sessions/$(sessionId)/players/$(request.auth.uid))
+                 .data.get('characterId', '') != '';
+      }
+
+      match /searches/{searchId} {
+        allow read: if isMember(sessionId) || controls(sessionId);
+        allow create: if isSelf(request.resource.data.uid)
+                      && searchId == request.resource.data.uid + '_' + request.resource.data.phase
+                      && request.resource.data.keys().hasOnly(['uid', 'locationId', 'phase', 'findId', 'at'])
+                      && request.resource.data.locationId is string
+                      && request.resource.data.at == request.time
+                      && canSearchNow(request.resource.data.phase)
+                      && isMember(sessionId)
+                      && isDealt()
+                      && (request.resource.data.findId == null
+                          || getAfter(/databases/$(database)/documents/sessions/$(sessionId)/finds/$(request.resource.data.findId)).data.uid == request.auth.uid);
+        allow update: if false;
+        allow delete: if controls(sessionId);
+      }
+
+      match /finds/{findId} {
+        allow read: if isMember(sessionId) || controls(sessionId);
+        allow create: if isSelf(request.resource.data.uid)
+                      && request.resource.data.keys().hasOnly(['uid', 'locationId', 'phase', 'at'])
+                      && request.resource.data.at == request.time
+                      && getAfter(/databases/$(database)/documents/sessions/$(sessionId)/searches/$(request.auth.uid + '_' + request.resource.data.phase)).data.findId == findId;
+        allow update: if false;
+        allow delete: if controls(sessionId);
+      }
+
+      // Only the player holding a find may show it, once, while the
+      // game is live. (The text is copied in by the finder's phone —
+      // part of the honour system.)
+      match /shared/{findId} {
+        allow read: if isMember(sessionId) || controls(sessionId);
+        allow create: if isSelf(request.resource.data.uid)
+                      && get(/databases/$(database)/documents/sessions/$(sessionId)/finds/$(findId)).data.uid == request.auth.uid
+                      && request.resource.data.keys().hasOnly(['uid', 'name', 'title', 'text', 'at'])
+                      && request.resource.data.at == request.time
+                      && sessionData(sessionId).status == 'live';
+        allow update: if false;
+        allow delete: if controls(sessionId);
       }
     }
 

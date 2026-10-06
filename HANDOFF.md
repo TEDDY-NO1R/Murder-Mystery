@@ -46,8 +46,15 @@ Read `README.md` for the game, `SETUP.md` for setup and deployment.
    `sessions/{CODE}/private/{uid}`, writes the ending to
    `sessions/{CODE}/reveal/summary`, and stores sorted `castIds`.
 4. A bar at the bottom of the host's screen releases the next clue (never
-   previewed), advances phases, counts accusations, reveals, and closes the
-   room — deleting every child document, then the session.
+   previewed), advances phases, counts searches and accusations, reveals,
+   and closes the room — deleting every child document, then the session.
+5. **Search the house** (added 6 Oct 2026, the owner wanted more to do):
+   in arrival, investigation and confrontation each dealt player searches
+   one room per round from the Search tab. A search claims the next
+   unclaimed find in that room whose phase has been reached (first come,
+   first served); finds are private until shown to the table, and who
+   searched where is public. Rooms live in `stories/{id}/locations` and
+   are seeded from `js/admin-seed.js` (not editable in the editor yet).
 
 Everything is in `js/game.js`; the page is `play.html` (served at `/`).
 
@@ -80,6 +87,9 @@ What the rules do enforce:
 - Votes: create-only, during `accusation`, by a dealt player, naming
   another dealt character (`castIds`), with a server timestamp.
 - The reveal is unreadable from the room until phase `reveal`.
+- Searches: one per dealt player per search round (doc id
+  `{uid}_{phase}`), each find claimed once (create-only, written in the
+  same batch as its search), and only a find's holder can share it.
 - Player reads of a session's children require the session to exist.
 
 ---
@@ -118,6 +128,9 @@ stories/{storyId}/characters/{charId}
 stories/{storyId}/phases/{phaseId}
   name, order, clues: [{ id, title, text }]   (released in this order)
 
+stories/{storyId}/locations/{locId}    searchable rooms
+  name, blurb, order, finds: [{ id, title, text, phase }]
+
 sessions/{ROOMCODE}                    doc id IS the room code
   roomCode, storyId, storyTitle, storySynopsis,
   status ('open'|'live'|'ended'), currentPhase,
@@ -133,6 +146,9 @@ sessions/{ROOMCODE}/private/{uid}      that player (and the host)
 sessions/{ROOMCODE}/votes/{uid}        suspectId, castAt   (create-only)
 sessions/{ROOMCODE}/reveal/summary     killerId, headline, method,
                                        motive, epilogue, cast[]
+sessions/{ROOMCODE}/searches/{uid}_{phase}  uid, locationId, phase, findId|null, at
+sessions/{ROOMCODE}/finds/{findId}     uid, locationId, phase, at   (who holds it)
+sessions/{ROOMCODE}/shared/{findId}    uid, name, title, text, at   (shown to table)
 ```
 
 Roles scale as: 3 = Killer/Detective/Suspect, 4 adds Witness, 5 adds
