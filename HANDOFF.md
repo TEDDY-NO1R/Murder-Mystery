@@ -1,28 +1,59 @@
 # Handoff — read this first
 
-Written 29 Aug 2026, at the end of the Phase 1 build, immediately before
-the development machine was to be reformatted. If you are a fresh Claude
-session or a future me, this is the whole state of play.
+Written 29 Aug 2026, at the end of the Phase 1 build; updated 6 Oct 2026.
+If you are a fresh Claude session or a future me, start with the
+**6 Oct 2026 update** directly below — the sections after it describe the
+29 Aug state and are kept for history where they differ.
+
+---
+
+## 6 Oct 2026 update — anyone can host
+
+- **Hosting moved onto the home page.** `host.html` and `js/host.js` are
+  gone (old links redirect to `/`). Any player taps **Host a game**, picks a
+  published story, opens a room and plays too. Their phone deals the cards,
+  releases clues (without previewing them) and advances phases; the screen
+  shows buttons and counts, never a secret.
+- **Honour system, chosen by the owner.** Dealing on the host's phone
+  means stories must be readable by any signed-in browser, so a player
+  digging in DevTools could find the ending. Explicitly accepted "for
+  now". Making it cheat-proof needs a server-side dealer (Netlify Function
+  with the Firebase Admin SDK works on the free Spark plan).
+- **Rules:** stories read = signed in, write = editor allowlist. Sessions
+  are created by any signed-in user as `hostUid`, and only that host (or
+  the editor) can update/delete the room and its children. Player cards,
+  votes, joins and the reveal keep the audit-era protections.
+  **This revision must be published in the Firebase console.**
+- **New story written:** *The Speckled Band*, id `the-speckled-band`,
+  8 characters (3–8 players), 12 clues. Seed files recreated at
+  `js/admin-seed.js` + `admin/seed.html` — **on this PC only** (gitignored,
+  404'd on Netlify). If lost again, the story still lives in Firestore once
+  seeded. The old `speckled-band` doc ("Death at Stoke Moran", likely the
+  legacy array shape) was left untouched; it is hidden from the host list
+  unless it is published in the subcollection shape.
+- **Editor password** for `hasthimunisilva@icloud.com` was reset on 6 Oct
+  by the owner — the blocker below is resolved.
+- A story-editor login can also play; it is just another player in a game.
 
 ---
 
 ## What this project is
 
 A murder mystery party game for people in one room. Each guest's phone is
-their private character card; one host runs the evening from a laptop.
+their private character card; any one of them can host, and plays too.
 Plain HTML/CSS/JS, no framework, no npm, no build step. Firebase v10 via
 CDN for Firestore and Auth. Deployed on Netlify.
 
 - **Live:** https://murder-mystery-online.netlify.app
 - **Repo:** https://github.com/TEDDY-NO1R/Murder-Mystery (**public**)
 - **Firebase project:** `murder-mystery-online` (Spark/free, Firestore in `eur3`)
-- **Host account:** `hasthimunisilva@icloud.com`, UID `B8CkPp6XqTcHfvOcZHE8ghqNahI3`
+- **Story-editor account:** `hasthimunisilva@icloud.com`, UID `B8CkPp6XqTcHfvOcZHE8ghqNahI3`
 
 Read `README.md` for the game, `SETUP.md` for the Firebase setup in order.
 
 ---
 
-## Status: built, deployed, secured — NOT yet seeded
+## Status as of 29 Aug (superseded — see the 6 Oct update above)
 
 | | |
 |---|---|
@@ -39,7 +70,7 @@ Nobody can play until the story is seeded. The host panel will say
 
 ---
 
-## THE ONE BLOCKER: the host password
+## The host password (resolved 6 Oct 2026 — kept for reference)
 
 The seed page and the host panel both need a sign-in as
 `hasthimunisilva@icloud.com`. **The password was never known to Claude and
@@ -153,7 +184,11 @@ Nothing else in the project depends on that file; it is a one-time seeder.
 
 ---
 
-## The security model — do not undo this
+## The security model as of 29 Aug
+
+> Since 6 Oct the stories tree is readable by any signed-in browser and
+> any player can host (see the update at the top). The points below about
+> `/stories` being admin-only no longer hold; the session-level ones do.
 
 One rule governs everything: **a phone can only download the character it
 owns.** Not hidden by the UI — refused by Firestore.

@@ -58,6 +58,30 @@
         <button type="submit" class="btn primary" id="join-btn">Enter</button>
         <p class="error" id="join-error" role="alert" hidden></p>
       </form>
+
+      <p class="or"><span>or</span></p>
+      <button type="button" class="btn" id="host-start">Host a game</button>
+    </div>
+  </section>
+
+  <!-- ── 1b. HOST: CHOOSE A STORY ─────────────────────────── -->
+  <section class="screen" data-screen="host">
+    <div class="wrap narrow">
+      <p class="eyebrow">Host a game</p>
+      <h2 class="display sm">Choose a story</h2>
+      <p class="lede">You play too. Your screen never shows who did it.</p>
+      <hr class="rule">
+
+      <ul class="story-list" id="story-list"></ul>
+      <p class="waiting" id="story-loading"><span class="pulse"></span> Fetching the stories</p>
+
+      <label for="host-name">Your name</label>
+      <input id="host-name" type="text" maxlength="24" autocomplete="off"
+             placeholder="How you're known tonight">
+
+      <button type="button" class="btn primary" id="host-open" disabled>Open the room</button>
+      <p class="error" id="host-error" role="alert" hidden></p>
+      <button type="button" class="link-btn" id="host-back">Back</button>
     </div>
   </section>
 
@@ -72,7 +96,17 @@
       <p class="eyebrow">Present <span id="lobby-count" class="dim"></span></p>
       <ul class="guest-list" id="lobby-players"></ul>
 
-      <p class="waiting"><span class="pulse"></span> Waiting for the host to begin</p>
+      <p class="waiting" id="lobby-waiting"><span class="pulse"></span> Waiting for the host to begin</p>
+
+      <!-- Only the player who opened the room sees this -->
+      <div id="lobby-host" hidden>
+        <p class="hint">Read the room code out. When everyone is in, start the
+          game — the parts are dealt at random, and you get one too.</p>
+        <button type="button" class="btn primary" id="start-btn" disabled>Start game</button>
+        <p class="hint" id="start-hint"></p>
+        <p class="error" id="start-error" role="alert" hidden></p>
+        <button type="button" class="link-btn" id="lobby-close">Close room</button>
+      </div>
     </div>
   </section>
 
@@ -171,6 +205,19 @@
       <ul class="cast-list" id="reveal-cast"></ul>
     </div>
   </section>
+
+  <!-- ── HOST CONTROLS — once the game is under way ───────── -->
+  <!-- Buttons only. Clues are released without being previewed,
+       so the host learns each one at the same moment as everyone. -->
+  <div class="host-bar" id="host-bar" hidden>
+    <p class="host-bar-status"><span class="eyebrow">Hosting</span> <span id="hb-status"></span></p>
+    <div class="host-bar-actions">
+      <button type="button" class="btn sm" id="hb-clue">Release a clue</button>
+      <button type="button" class="btn sm primary" id="hb-next">Next phase</button>
+    </div>
+    <p class="error" id="hb-error" role="alert" hidden></p>
+    <button type="button" class="link-btn" id="hb-close">Close room</button>
+  </div>
 
 </div>
 

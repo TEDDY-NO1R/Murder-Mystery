@@ -1,26 +1,32 @@
 // ============================================================
-//  MURDER MYSTERY — player client
+//  MURDER MYSTERY — the one page everyone uses
 // ============================================================
 //
-//  This file runs on every guest's phone, so treat everything in
-//  it as public. It contains no story text whatsoever. Every word
-//  a player reads is fetched from Firestore against their own
-//  anonymous auth token:
+//  Every guest joins with a room code. Any guest can instead
+//  host: pick a story, open a room, and play like everyone else.
+//
+//  The host's phone does the dealing — it reads the story's
+//  characters, shuffles them, and writes each player's card to
+//  sessions/{code}/private/{that player's uid}. It also releases
+//  clues and moves the phases on. None of that is ever drawn on
+//  the host's screen: the host sees buttons and counts, and
+//  learns each clue, card and the ending at the same moment as
+//  everyone else. (The data does pass through the host's
+//  browser, so this relies on the host not digging for it.)
 //
 //    session doc      → phase, and clues the host has released
 //    players/*        → the lobby list and the ballot (no secrets)
 //    private/{my uid} → this player's character, and only theirs
 //    reveal/summary   → refused by the rules until phase = reveal
-//
-//  There is no client-side filtering of secrets anywhere below,
-//  because no secrets ever arrive. If a fetch is refused, we show
-//  a message; we never "hide" data we were given.
 // ============================================================
 
 import {
   waitForAuth, signInPlayer, describeError,
-  paths, getDoc, setDoc, updateDoc, getDocs, onSnapshot, serverTimestamp,
-  normaliseRoomCode, CODE_LENGTH, phaseMeta, ROLE_FIELDS, ROLES,
+  db, paths, getDoc, setDoc, updateDoc, deleteDoc, getDocs, onSnapshot,
+  serverTimestamp, writeBatch, arrayUnion,
+  normaliseRoomCode, generateRoomCode, CODE_LENGTH,
+  PHASE_IDS, phaseMeta, nextPhase,
+  ROLES, ROLE_FIELDS, rolesForPlayerCount, MIN_PLAYERS, MAX_PLAYERS,
   IS_FILE_PROTOCOL
 } from './firebase-init.js';
 
@@ -32,19 +38,25 @@ const $$ = sel => Array.from(document.querySelectorAll(sel));
 // ------------------------------------------------------------
 
 const state = {
-  uid:      null,
-  code:     null,   // room code, which is also the session doc id
-  session:  null,   // live session document
-  players:  [],     // live roster (public fields only)
-  card:     null,   // this player's private character document
-  vote:     null,   // characterId this player voted for
-  screen:   null
+  uid:       null,
+  code:      null,   // room code, which is also the session doc id
+  session:   null,   // live session document
+  players:   [],     // live roster (public fields only)
+  card:      null,   // this player's private character document
+  vote:      null,   // characterId this player voted for
+  screen:    null,
+  isHost:    false,  // did this player open the room?
+  voteCount: 0,      // host only: how many have accused (not for whom)
+  hostClues: null,   // host only: the story's clues, in release order — never rendered
+  stories:   [],     // the story picker
+  closing:   false   // host pressed "Close room"
 };
 
-const unsub = { session: null, players: null, card: null };
+const unsub = { session: null, players: null, card: null, votes: null };
 
-let picked = null;     // ballot choice not yet submitted
-let revealed = false;  // reveal already fetched for this room
+let picked = null;       // ballot choice not yet submitted
+let pickedStory = null;  // story chosen on the host screen
+let revealed = false;    // reveal already fetched for this room
 
 // Per-device memory. Notes and "have I opened my envelope" are
 // deliberately local — there is no Firestore path a player is
@@ -83,6 +95,7 @@ function boot(msg) {
 // Decide which screen the current state implies. Called on every
 // snapshot, so the phone follows the host without any polling.
 function route() {
+  renderHostControls();
   if (!state.code || !state.session) return show('join');
 
   const phase = state.session.currentPhase || 'lobby';
@@ -159,6 +172,150 @@ $('#join-form').addEventListener('submit', async (e) => {
 });
 
 // ------------------------------------------------------------
+//  Host: choose a story and open a room
+// ------------------------------------------------------------
+
+$('#host-start').addEventListener('click', async () => {
+  $('#join-error').hidden = true;
+  $('#host-error').hidden = true;
+  if (!$('#host-name').value) $('#host-name').value = $('#name').value;
+  show('host');
+  await loadStories();
+});
+
+$('#host-back').addEventListener('click', () => show('join'));
+$('#host-name').addEventListener('input', syncHostOpen);
+
+function syncHostOpen() {
+  $('#host-open').disabled = !pickedStory || !$('#host-name').value.trim();
+}
+
+// Only stories the editor has published, in the subcollection
+// shape. The picker shows title, blurb and table size — nothing
+// from inside the story.
+async function loadStories() {
+  const list = $('#story-list');
+  $('#story-loading').hidden = false;
+  list.innerHTML = '';
+  try {
+    const snap = await getDocs(paths.stories());
+    state.stories = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(s => s.status === 'published' && !Array.isArray(s.characters))
+      .sort((a, b) => (a.title || a.id).localeCompare(b.title || b.id));
+  } catch (err) {
+    state.stories = [];
+    hostError(describeError(err));
+  }
+  $('#story-loading').hidden = true;
+  if (!state.stories.some(s => s.id === pickedStory)) pickedStory = state.stories[0]?.id || null;
+  renderStories();
+}
+
+function renderStories() {
+  const list = $('#story-list');
+  list.innerHTML = '';
+
+  if (!state.stories.length) {
+    const li = document.createElement('li');
+    li.className = 'hint';
+    li.textContent = 'No stories are ready to play yet.';
+    list.appendChild(li);
+  }
+
+  state.stories.forEach(s => {
+    const li = document.createElement('li');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.setAttribute('aria-pressed', String(pickedStory === s.id));
+
+    const t = document.createElement('span');
+    t.className = 'story-title';
+    t.textContent = s.title || s.id;
+    btn.appendChild(t);
+
+    if (s.synopsis) {
+      const b = document.createElement('span');
+      b.className = 'story-blurb';
+      b.textContent = s.synopsis;
+      btn.appendChild(b);
+    }
+
+    const m = document.createElement('span');
+    m.className = 'story-meta';
+    m.textContent = [
+      `${s.minPlayers || MIN_PLAYERS}–${s.maxPlayers || MAX_PLAYERS} players`,
+      s.estimatedTime
+    ].filter(Boolean).join(' · ');
+    btn.appendChild(m);
+
+    btn.addEventListener('click', () => { pickedStory = s.id; renderStories(); });
+    li.appendChild(btn);
+    list.appendChild(li);
+  });
+
+  syncHostOpen();
+}
+
+function hostError(msg) {
+  $('#host-error').textContent = msg;
+  $('#host-error').hidden = false;
+}
+
+$('#host-open').addEventListener('click', async () => {
+  const btn = $('#host-open');
+  btn.disabled = true;
+  $('#host-error').hidden = true;
+
+  const name = $('#host-name').value.trim().slice(0, 24);
+  const story = state.stories.find(s => s.id === pickedStory);
+
+  try {
+    if (!story) throw new Error('Choose a story first.');
+    if (!name) throw new Error('Enter the name you want on the table.');
+
+    // The document id IS the room code. Reroll until it is free —
+    // the rules also refuse to let anyone but its host overwrite a
+    // live room.
+    let code = null;
+    for (let i = 0; i < 8 && !code; i++) {
+      const candidate = generateRoomCode();
+      if (!(await getDoc(paths.session(candidate))).exists()) code = candidate;
+    }
+    if (!code) throw new Error('Could not find a free room code. Try again.');
+
+    // Title and blurb are copied here so the lobby needs nothing
+    // from the story itself.
+    await setDoc(paths.session(code), {
+      roomCode:      code,
+      storyId:       story.id,
+      storyTitle:    story.title || '',
+      storySynopsis: story.synopsis || '',
+      status:        'open',
+      currentPhase:  'lobby',
+      revealedClues: [],
+      hostUid:       state.uid,
+      createdAt:     serverTimestamp()
+    });
+
+    // A code whose earlier room was never cleaned up may still have
+    // children. Clear them so an old roster, card or vote cannot
+    // leak into this room. (Done after creating the room, because
+    // the rules let only this room's host delete them.)
+    await purgeRoom(code);
+
+    await setDoc(paths.player(code, state.uid), { name, joinedAt: serverTimestamp() });
+
+    localStorage.setItem(LAST, code);
+    await attach(code);
+  } catch (ex) {
+    hostError(ex.code ? describeError(ex) : ex.message);
+  } finally {
+    syncHostOpen();
+  }
+});
+
+// ------------------------------------------------------------
 //  Live listeners
 // ------------------------------------------------------------
 
@@ -178,9 +335,12 @@ async function attach(code) {
 
   unsub.session = onSnapshot(paths.session(code),
     snap => {
-      if (!snap.exists()) { leave('The host ended this game.'); return; }
+      if (!snap.exists()) { leave(state.closing ? 'Room closed.' : 'The host ended this game.'); return; }
       state.session = snap.data();
+      state.isHost = state.session.hostUid === state.uid;
+      if (state.isHost) watchVotes(code);
       renderSession();
+      renderLobby();
       route();
     },
     err => lost(err)
@@ -191,22 +351,32 @@ async function attach(code) {
       state.players = snap.docs
         .map(d => ({ uid: d.id, ...d.data() }))
         .sort((a, b) => (a.joinedAt?.seconds || 0) - (b.joinedAt?.seconds || 0));
-      if (!state.players.some(p => p.uid === state.uid)) { leave(GONE); return; }
+      if (!state.players.some(p => p.uid === state.uid)) { leave(state.closing ? 'Room closed.' : GONE); return; }
       renderLobby();
       renderBallot();
+      renderHostControls();
     },
     err => lost(err)
   );
 
-  // The load-bearing read. If someone tampered with this path to
-  // point at another player, Firestore refuses it outright and we
-  // land in lost() — there is nothing to filter client-side.
+  // Only ever this player's own card. Another player's path is
+  // refused by the rules.
   unsub.card = onSnapshot(paths.private(code, state.uid),
     snap => {
       state.card = snap.exists() ? snap.data() : null;
       renderCard();
       route();
     },
+    err => lost(err)
+  );
+}
+
+// The host counts accusations so they know when to reveal. The
+// count is all that is used — who voted for whom stays unread.
+function watchVotes(code) {
+  if (unsub.votes) return;
+  unsub.votes = onSnapshot(paths.votes(code),
+    snap => { state.voteCount = snap.size ?? snap.docs.length; renderHostControls(); },
     err => lost(err)
   );
 }
@@ -220,13 +390,13 @@ function fail(err) {
   boot(describeError(err));
 }
 
+const GONE = 'You are no longer in that room — the host ended the game or removed you.';
+
 // A live listener died. Once a room is closed or we are removed
 // from it, the rules refuse its documents — that is the expected
 // end of the game, not an error to sit on.
-const GONE = 'You are no longer in that room — the host ended the game or removed you.';
-
 function lost(err) {
-  if (err?.code === 'permission-denied') { leave(GONE); return; }
+  if (err?.code === 'permission-denied') { leave(state.closing ? 'Room closed.' : GONE); return; }
   fail(err);
 }
 
@@ -256,6 +426,10 @@ function forgetRoom() {
 function resetRoomState() {
   state.code = state.session = state.card = state.vote = null;
   state.players = [];
+  state.isHost = false;
+  state.voteCount = 0;
+  state.hostClues = null;
+  state.closing = false;
   picked = null;
   revealed = false;
 
@@ -267,7 +441,8 @@ function resetRoomState() {
   ['#lobby-players', '#clue-feed', '#ballot', '#card-fields',
    '#game-card', '#reveal-body', '#reveal-cast'].forEach(sel => { $(sel).innerHTML = ''; });
   ['#lobby-count', '#card-role', '#card-name', '#card-title',
-   '#game-whoami', '#vote-status'].forEach(sel => { $(sel).textContent = ''; });
+   '#game-whoami', '#vote-status', '#start-hint'].forEach(sel => { $(sel).textContent = ''; });
+  ['#start-error', '#hb-error'].forEach(sel => { $(sel).hidden = true; });
 
   $('#clue-empty').hidden = false;
   const badge = $('#clue-count');
@@ -281,6 +456,7 @@ function resetRoomState() {
 
   notepad.value = '';
   document.querySelector('.tab[data-tab="clues"]').click();
+  renderHostControls();
 }
 
 // ------------------------------------------------------------
@@ -305,10 +481,25 @@ function renderSession() {
 function renderLobby() {
   const list = $('#lobby-players');
   list.innerHTML = '';
+  const canKick = state.isHost && state.session?.currentPhase === 'lobby';
+
   state.players.forEach(p => {
     const li = document.createElement('li');
-    li.textContent = p.name;
+    const nm = document.createElement('span');
+    nm.textContent = p.name;
+    li.appendChild(nm);
     if (p.uid === state.uid) li.classList.add('is-you');
+
+    // The host can turn away someone who joined by mistake, or trim
+    // an overfull room before dealing.
+    if (canKick && p.uid !== state.uid) {
+      const kick = document.createElement('button');
+      kick.type = 'button';
+      kick.className = 'kick';
+      kick.textContent = 'Remove';
+      kick.addEventListener('click', () => removePlayer(p, kick));
+      li.appendChild(kick);
+    }
     list.appendChild(li);
   });
   $('#lobby-count').textContent = state.players.length ? `· ${state.players.length}` : '';
@@ -439,6 +630,342 @@ function renderClues() {
 }
 
 // ------------------------------------------------------------
+//  Host controls
+//
+//  Everything here shows counts and phase names only. Clue text
+//  reaches the host's screen through the same feed as everyone
+//  else's, after it has been released.
+// ------------------------------------------------------------
+
+function renderHostControls() {
+  const s = state.session;
+  const phase = s?.currentPhase || 'lobby';
+  const hosting = state.isHost && !!s;
+
+  // Lobby panel
+  $('#lobby-host').hidden = !(hosting && phase === 'lobby');
+  $('#lobby-waiting').hidden = hosting;
+  if (hosting && phase === 'lobby') {
+    const n = state.players.length;
+    const min = Math.max(MIN_PLAYERS, storyMeta()?.minPlayers || 0);
+    const max = Math.min(MAX_PLAYERS, storyMeta()?.maxPlayers || MAX_PLAYERS);
+    $('#start-btn').disabled = n < min || n > max;
+    $('#start-hint').textContent = n < min
+      ? `${min - n} more player${min - n === 1 ? '' : 's'} needed (you count).`
+      : n > max
+        ? `Too many players — this story seats ${max}. Remove someone.`
+        : `Ready to deal ${n} parts.`;
+  }
+
+  // In-game bar
+  const bar = $('#host-bar');
+  bar.hidden = !(hosting && phase !== 'lobby');
+  document.body.classList.toggle('has-host-bar', !bar.hidden);
+  if (bar.hidden) return;
+
+  const next = nextPhase(phase);
+  const dealt = state.players.filter(p => p.characterId).length;
+  const left = cluesLeft();
+
+  let status = phaseMeta(phase).label;
+  if (phase === 'accusation') status += ` · ${state.voteCount} of ${dealt} have accused`;
+  else if (phase !== 'reveal' && left !== null) status += ` · ${left} clue${left === 1 ? '' : 's'} left to release`;
+  $('#hb-status').textContent = status;
+
+  const clueBtn = $('#hb-clue');
+  clueBtn.hidden = phase === 'reveal';
+  clueBtn.disabled = left === 0;
+  clueBtn.textContent = left === 0 ? 'No clues left' : 'Release a clue';
+
+  const nextBtn = $('#hb-next');
+  nextBtn.hidden = !next;
+  nextBtn.textContent = next === 'reveal' ? 'Reveal the truth' : (next ? `Next: ${phaseMeta(next).label}` : '');
+
+  if (hosting && state.hostClues === null) loadHostClues();
+}
+
+// Story details the lobby can use (table size). From the picker if
+// this phone opened the room in this visit; otherwise unknown, and
+// the start check falls back to the story itself.
+function storyMeta() {
+  return state.stories.find(s => s.id === state.session?.storyId) || null;
+}
+
+let cluesLoading = false;
+async function loadHostClues() {
+  if (cluesLoading || !state.session) return;
+  cluesLoading = true;
+  const code = state.code;
+  try {
+    const snap = await getDocs(paths.storyPhases(state.session.storyId));
+    if (state.code !== code) return;
+    const byId = Object.fromEntries(snap.docs.map(d => [d.id, d.data()]));
+    state.hostClues = PHASE_IDS.flatMap((id, phaseIdx) =>
+      ((byId[id]?.clues) || []).map(c => ({ phaseIdx, id: c.id, title: c.title || '', text: c.text || '' })));
+  } catch (err) {
+    console.error(err);
+    state.hostClues = [];
+  } finally {
+    cluesLoading = false;
+  }
+  renderHostControls();
+}
+
+// Clues from the current phase and earlier that are still unreleased.
+function availableClues() {
+  if (!state.hostClues || !state.session) return null;
+  const now = PHASE_IDS.indexOf(state.session.currentPhase);
+  const out = new Set((state.session.revealedClues || []).map(c => c.id));
+  return state.hostClues.filter(c => c.phaseIdx <= now && !out.has(c.id));
+}
+
+function cluesLeft() {
+  const a = availableClues();
+  return a === null ? null : a.length;
+}
+
+function hostFail(where, ex) {
+  const el = $(where);
+  el.textContent = ex.code ? describeError(ex) : ex.message;
+  el.hidden = false;
+}
+
+$('#hb-clue').addEventListener('click', async () => {
+  const btn = $('#hb-clue');
+  const next = (availableClues() || [])[0];
+  if (!next) return;
+  btn.disabled = true;
+  $('#hb-error').hidden = true;
+  try {
+    // Copies the clue into the session, where every phone —
+    // including this one — shows it in the feed.
+    await updateDoc(paths.session(state.code), {
+      revealedClues: arrayUnion({ id: next.id, title: next.title, text: next.text })
+    });
+  } catch (ex) { hostFail('#hb-error', ex); }
+  renderHostControls();
+});
+
+$('#hb-next').addEventListener('click', async () => {
+  const cur = state.session?.currentPhase;
+  const next = nextPhase(cur);
+  if (!next) return;
+  if (next === 'reveal') {
+    const dealt = state.players.filter(p => p.characterId).length;
+    if (!confirm(`Reveal the truth to everyone? ${state.voteCount} of ${dealt} have accused.`)) return;
+  }
+  const btn = $('#hb-next');
+  btn.disabled = true;
+  $('#hb-error').hidden = true;
+  try {
+    await updateDoc(paths.session(state.code), {
+      currentPhase: next,
+      ...(next === 'reveal' ? { status: 'ended' } : {})
+    });
+  } catch (ex) { hostFail('#hb-error', ex); }
+  btn.disabled = false;
+});
+
+async function closeRoom(btn) {
+  if (!confirm('Close this room? Everyone will be returned to the join screen.')) return;
+  btn.disabled = true;
+  state.closing = true;
+  try {
+    await purgeRoom(state.code, { andSession: true });
+  } catch (ex) {
+    state.closing = false;
+    btn.disabled = false;
+    hostFail(state.session?.currentPhase === 'lobby' ? '#start-error' : '#hb-error', ex);
+  }
+}
+
+$('#lobby-close').addEventListener('click', e => closeRoom(e.currentTarget));
+$('#hb-close').addEventListener('click', e => closeRoom(e.currentTarget));
+
+async function removePlayer(p, btn) {
+  if (!confirm(`Remove ${p.name} from the room?`)) return;
+  btn.disabled = true;
+  try {
+    await deleteDoc(paths.player(state.code, p.uid));
+  } catch (ex) {
+    btn.disabled = false;
+    hostFail('#start-error', ex);
+  }
+}
+
+// Firestore does not cascade deletes. Remove every child of a
+// session explicitly, in chunks well under the 500-write batch
+// limit. When `andSession` is set the session document goes in the
+// final chunk, so players see "the host ended this game" only once
+// nothing of it is left behind.
+async function purgeRoom(code, { andSession = false } = {}) {
+  const refs = [];
+  for (const col of [paths.players(code), paths.privates(code), paths.votes(code)]) {
+    (await getDocs(col)).docs.forEach(d => refs.push(d.ref));
+  }
+  refs.push(paths.reveal(code));          // deleting a missing doc is a no-op
+  if (andSession) refs.push(paths.session(code));
+
+  for (let i = 0; i < refs.length; i += 400) {
+    const batch = writeBatch(db);
+    refs.slice(i, i + 400).forEach(r => batch.delete(r));
+    await batch.commit();
+  }
+}
+
+// ------------------------------------------------------------
+//  Host: dealing
+//
+//  The story is read, shuffled and written straight back out as
+//  one card per player. Nothing from it is put on this screen.
+// ------------------------------------------------------------
+
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = crypto.getRandomValues(new Uint32Array(1))[0] % (i + 1);
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// One character per required role, lowest `order` first, so a
+// 4-player game gets the four parts the story leans on.
+function pickCharacters(chars, count) {
+  const needed = rolesForPlayerCount(count);
+  const pool = {};
+  chars.forEach(c => { (pool[c.role] ||= []).push(c); });
+
+  const chosen = [];
+  const shortfall = [];
+  needed.forEach(role => {
+    const next = (pool[role] || []).shift();
+    if (next) chosen.push(next); else shortfall.push(role);
+  });
+
+  if (shortfall.length) {
+    throw new Error(`This story cannot seat ${count} players. Try a different number of players.`);
+  }
+  return chosen;
+}
+
+// A story whose ending would contradict the cast cannot be dealt.
+// The messages name roles only — never which character holds one.
+function storyProblems(story, chars) {
+  const out = [];
+  const of = r => chars.filter(c => c.role === r);
+  const killers = of(ROLES.KILLER);
+  if (killers.length !== 1)                 out.push('it needs exactly one killer');
+  if (of(ROLES.DETECTIVE).length !== 1)     out.push('it needs exactly one detective');
+  if (of(ROLES.ACCOMPLICE).length > 1)      out.push('it has more than one accomplice');
+  if (chars.some(c => !Object.values(ROLES).includes(c.role))) out.push('a character has no role');
+  const solId = story.solution?.killerId;
+  if (killers.length === 1 && solId && solId !== killers[0].id) out.push('its solution names the wrong character');
+  return out;
+}
+
+// The document that goes to one player's phone. Built field by
+// field: a character could grow a new field tomorrow and it still
+// would not reach anyone unless ROLE_FIELDS says that role sees it.
+function cardFor(character) {
+  const allowed = ROLE_FIELDS[character.role] || ROLE_FIELDS[ROLES.SUSPECT];
+  const card = {
+    characterId: character.id,
+    role:        character.role,
+    name:        character.name || '',
+    title:       character.title || ''
+  };
+  allowed.forEach(key => {
+    if (key === 'name') return;
+    const v = character[key];
+    if (v !== undefined && v !== null && v !== '') card[key] = v;
+  });
+  return card;
+}
+
+$('#start-btn').addEventListener('click', async () => {
+  const btn = $('#start-btn');
+  btn.disabled = true;
+  $('#start-error').hidden = true;
+
+  try {
+    const players = state.players;
+    const n = players.length;
+
+    const storySnap = await getDoc(paths.story(state.session.storyId));
+    if (!storySnap.exists()) throw new Error('This story no longer exists.');
+    const story = storySnap.data();
+
+    if (n < MIN_PLAYERS) throw new Error(`Need at least ${MIN_PLAYERS} players.`);
+    if (n > MAX_PLAYERS) throw new Error(`No more than ${MAX_PLAYERS} players.`);
+    if (story.minPlayers && n < story.minPlayers) throw new Error(`This story needs at least ${story.minPlayers} players.`);
+    if (story.maxPlayers && n > story.maxPlayers) throw new Error(`This story seats at most ${story.maxPlayers} players.`);
+
+    const chars = (await getDocs(paths.characters(state.session.storyId))).docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (a.order || 99) - (b.order || 99));
+
+    const problems = storyProblems(story, chars);
+    if (problems.length) {
+      throw new Error(`This story isn't ready to play (${problems.join('; ')}). Ask the story editor to fix it.`);
+    }
+
+    const chosen = shuffle(pickCharacters(chars, n));
+    const killer = chosen.find(c => c.role === ROLES.KILLER);
+    const batch = writeBatch(db);
+    const cast = [];
+
+    players.forEach((p, i) => {
+      const ch = chosen[i];
+
+      // The private card — fetched only by this player's own phone.
+      batch.set(paths.private(state.code, p.uid), cardFor(ch));
+
+      // The public half: name and character only. No role, ever.
+      // This is what builds everyone's ballot.
+      batch.update(paths.player(state.code, p.uid), {
+        characterId:   ch.id,
+        characterName: ch.name || ch.id
+      });
+
+      cast.push({
+        uid: p.uid,
+        playerName: p.name,
+        characterId: ch.id,
+        characterName: ch.name || ch.id,
+        role: ch.role
+      });
+    });
+
+    // The answer. Written now, but the rules refuse every read of
+    // it until currentPhase is actually 'reveal'.
+    const sol = story.solution || {};
+    batch.set(paths.reveal(state.code), {
+      killerId: killer.id,
+      headline: sol.headline || '',
+      method:   sol.method   || '',
+      motive:   sol.motive   || '',
+      epilogue: sol.epilogue || '',
+      cast
+    });
+
+    // castIds lets the rules check that a vote names someone really
+    // in this game. Sorted so the list order says nothing about roles.
+    batch.update(paths.session(state.code), {
+      status: 'live',
+      currentPhase: 'arrival',
+      castIds: chosen.map(c => c.id).sort(),
+      startedAt: serverTimestamp()
+    });
+
+    await batch.commit();
+  } catch (ex) {
+    hostFail('#start-error', ex);
+    btn.disabled = false;
+  }
+});
+
+// ------------------------------------------------------------
 //  Envelope
 // ------------------------------------------------------------
 
@@ -561,9 +1088,8 @@ async function renderReveal() {
   const castList = $('#reveal-cast');
 
   try {
-    // Before this moment the rules refuse this document — not
-    // because the app hid it, but because sessions/{code}.currentPhase
-    // was not yet 'reveal'.
+    // Before this moment the rules refuse this document, because
+    // sessions/{code}.currentPhase was not yet 'reveal'.
     const snap = await getDoc(paths.reveal(code));
     if (state.code !== code) return;
     if (!snap.exists()) { body.textContent = 'The host has not written a reveal for this game.'; return; }

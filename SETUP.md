@@ -5,6 +5,14 @@ No terminal, no npm, no build step.
 
 Budget about 20 minutes.
 
+> **Changed 6 Oct 2026 — anyone can host.** There is no separate host
+> page any more: the home page offers **Join** or **Host a game**, and the
+> host plays too. Stories are now readable by any signed-in browser (the
+> host's phone needs them to deal) and only the story editor can write
+> them — see "Secrets" in README.md. Where this guide still talks about
+> `host.html` or "the whole stories tree is admin-only", that describes the
+> earlier model.
+
 ---
 
 ## Current state of your project (checked 29 Aug 2026)
@@ -18,10 +26,10 @@ Native mode. Some of this guide is already done.
 | 2. Firestore created | Done — `(default)`, eur3 |
 | 3a. Email/Password enabled | Done |
 | 3b. Anonymous enabled | Done — 29 Aug, with auto clean-up of stale guest accounts |
-| 4. Host account | Done — `hasthimunisilva@icloud.com`, UID `B8CkPp6XqTcHfvOcZHE8ghqNahI3` |
+| 4. Story-editor account | Done — `hasthimunisilva@icloud.com`, UID `B8CkPp6XqTcHfvOcZHE8ghqNahI3` (password reset 6 Oct) |
 | 5. Web app registered | Done — "Murder Mystery Web"; config already baked into `js/firebase-init.js` |
-| 6. Rules | Real `firestore.rules` published 29 Aug; tightened revision republished 6 Oct 2026. |
-| 7. Story seeded | **Not done as of 29 Aug.** Seed files are not on this machine — see HANDOFF.md. |
+| 6. Rules | Real `firestore.rules` published 29 Aug; audit revision 6 Oct; **"anyone can host" revision must be published** after 6 Oct. |
+| 7. Story seeded | New *The Speckled Band* (`the-speckled-band`) written 6 Oct; seed it from localhost (section 7). |
 
 ### What was found on 29 Aug (history)
 
@@ -72,9 +80,10 @@ untouched until you want them.
 
 ## What you are building
 
-People sit in one room. Each person opens `play.html` on their phone and
-joins with a room code. You open `host.html` on a laptop and run the game.
-Firestore keeps every phone in sync in real time.
+People sit in one room. Each person opens the site on their phone. One of
+them taps **Host a game**, picks a story and reads out the room code; the
+rest join with it. The host plays too, with a few extra buttons. Firestore
+keeps every phone in sync in real time.
 
 The whole design rests on one rule: **a phone can only ever download the
 character it owns.** Not "the UI hides the others" — the database itself
@@ -207,14 +216,14 @@ secret in the game is public.
 
 ### What these rules actually enforce
 
-| Path | Player (anonymous) | Host (email login) |
-|---|---|---|
-| `stories/**` — the whole tree | **denied — entirely** | read + write |
-| `sessions/{id}` | read | read + write |
-| `sessions/{id}/players/*` | read own, or all once joined; join only while the lobby is open; rename self | read + write + remove guests |
-| `sessions/{id}/private/{uid}` | **read own only** | read + write |
-| `sessions/{id}/votes/*` | read own; cast once, in accusation, only if dealt, for another dealt character; all visible at reveal | read + delete |
-| `sessions/{id}/reveal/summary` | read only at reveal, and only if joined | read + write |
+| Path | Any player | That room's host | Story editor (email login) |
+|---|---|---|---|
+| `stories/**` | read | read | read + write |
+| `sessions/{id}` | read; create a new room as its host | update / delete own room | everything |
+| `sessions/{id}/players/*` | read own, or all once joined; join only while the lobby is open; rename self | deal names, remove guests | everything |
+| `sessions/{id}/private/{uid}` | **read own only** | write (deal), clean up | everything |
+| `sessions/{id}/votes/*` | read own; cast once, in accusation, only if dealt, for another dealt character; all visible at reveal | count, clean up | everything |
+| `sessions/{id}/reveal/summary` | read only at reveal, and only if joined | write | everything |
 
 Every player read of a session's children also requires the session
 document to still exist, so a closed room's leftovers are unreadable.
@@ -252,22 +261,21 @@ Double-clicking the file will not work either: Firebase Auth rejects the
 `null` origin a `file://` page has. You need a local web server, and
 Python has one built in.
 
-1. Open a terminal in this folder and run:
-
-   ```
-   python -m http.server 8767
-   ```
-
+1. Serve this folder on `http://localhost:8767` with any static web server
+   (for example `python -m http.server 8767`, if Python is installed).
 2. Go to `http://localhost:8767/admin/seed.html`.
    (`localhost` is already in Firebase's authorised domains, so sign-in
    works.)
-3. Sign in with your host email and password.
-4. Click **Seed "The Speckled Band Mystery"**.
-5. Wait for the green confirmation, then stop the server with Ctrl+C.
+3. Sign in with the story-editor email and password.
+4. Click **Seed "The Speckled Band"**. The page shows only counts, never
+   story text, so whoever seeds can still play.
+5. Wait for the confirmation, then stop the server.
 
-This writes the story, its six characters, and its phases into Firestore.
-**Run it once.** Running it twice overwrites the story with a fresh copy
-and wipes any edits you made in the story editor.
+This writes the story (id `the-speckled-band`), its eight characters and
+its clues into Firestore, published, so it appears in the host's list.
+**Run it once.** Running it again overwrites the story with a fresh copy
+and wipes any edits you made in the story editor. Opening the story in
+the editor shows every secret — don't, if you want to play it.
 
 Once seeded, the story lives in Firestore and is edited through
 `admin/story.html`. The seed file has done its job — you can delete
@@ -331,42 +339,41 @@ then it changes nothing.
 
 Do this once. It takes two minutes and it's the only way to know.
 
-1. Open `host.html`, sign in, start a game.
-2. Join from a phone, or from a **different browser profile / private
-   window**, at `play.html`. Not a second tab of the host's browser: tabs
-   in one profile share one login, so that tab would be the host, not a
-   player. `play.html` now refuses to run there and says so.
-3. On the **player's** browser, open DevTools → **Console**, and run:
+Since 6 Oct, story data is readable by any signed-in browser (honour
+system — see README.md), so the old "read the characters and expect a
+permission error" test no longer applies. What still must hold:
+
+1. Host a game on one device and join from another (or from a **different
+   browser profile / private window** — tabs in one profile share one
+   identity, so they count as the same player).
+2. Start the game. On the **joining** browser, open DevTools → **Console**
+   and try to read the host's card (replace `CODE` and `HOST_UID`; the
+   host's UID is the id of their document under `sessions/CODE/players`):
 
    ```js
-   const { getFirestore, getDocs, collection } =
+   const { getFirestore, getDoc, doc } =
      await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
-   await getDocs(collection(getFirestore(), 'stories/speckled-band/characters'));
+   await getDoc(doc(getFirestore(), 'sessions/CODE/private/HOST_UID'));
    ```
 
-4. **You must see:** `FirebaseError: Missing or insufficient permissions.`
-
-If you see that error, the rules are working and a player cannot find the
-killer no matter how hard they dig. If you get actual data back, stop —
-the rules didn't publish. Go back to section 6, confirm you clicked
-**Publish**, and confirm the UID on the `isAdmin()` line matches the one
-in the Users tab.
-
-Worth repeating in the **Network** tab too: filter to `firestore` and
-confirm the only character data crossing the wire is the player's own.
+3. **You must see:** `FirebaseError: Missing or insufficient permissions.`
+   If you get data back, the rules didn't publish — go back to section 6.
 
 ---
 
 ## 10. Running a game
 
-1. You open `host.html`, sign in. A room code appears.
-2. Players open `play.html`, type the code and their name.
-3. You watch them appear in the lobby, then hit **Start Game**.
-4. Characters are dealt. Each phone shows a sealed envelope; tapping it
-   opens their card, and theirs alone.
-5. You advance phases and release clues one at a time. Every phone updates
-   live.
-6. At **Accusation**, players vote. At **Reveal**, everything opens up.
+1. One person opens the site, taps **Host a game**, picks a story, enters
+   their name and taps **Open the room**. A room code appears.
+2. Everyone else opens the site, types the code and their name.
+3. The host watches them appear in the lobby (and can remove anyone who
+   joined by mistake), then taps **Start game**.
+4. Characters are dealt — the host gets one too. Each phone shows a sealed
+   envelope; tapping it opens that player's card, and theirs alone.
+5. The host's bar at the bottom releases clues one at a time (without
+   previewing them) and moves to the next phase. Every phone updates live.
+6. At **Accusation**, players vote; the host's bar counts how many have.
+   **Reveal the truth** opens everything up. **Close room** ends it.
 
 Detective accuses correctly → innocents win. Wrong → the killer walks.
 
@@ -374,34 +381,35 @@ Detective accuses correctly → innocents win. Wrong → the killer walks.
 
 ## Troubleshooting
 
-**"Missing or insufficient permissions" when the host tries to start**
-The UID on the `isAdmin()` line doesn't match your account. Recopy it from
-Authentication → Users and republish the rules.
+**"Missing or insufficient permissions" when hosting or starting**
+The "anyone can host" rules haven't been published yet. Republish
+`firestore.rules` (section 6).
 
-**Host login fails on the live site but works locally**
+**Story-editor login fails on the live site but works locally**
 Not an authorized-domains problem — email/password works from any origin.
 Check the browser console for the real error; `auth/invalid-credential`
 means the email or password is simply wrong.
 
+**"No stories are ready to play yet" on the host screen**
+Only stories with status **published**, stored in the subcollection shape,
+are listed. Seed one (section 7) or publish one in the story editor.
+
 **Players can't join / room code not found**
-A room lasts until the host clicks **Close room** — closing or reloading
-the host tab does not end it, and `host.html` resumes the same room next
-time it is opened in that browser. A code stops working once the room is
+A room lasts until the host taps **Close room** — closing or reloading the
+host's page does not end it, and the host's phone rejoins the same room
+when the site is opened again. A code stops working once the room is
 closed, and joining is refused once the host has started the game (late
-arrivals cannot be dealt in). Check the code on the host screen, or open
-a fresh room.
+arrivals cannot be dealt in). Check the code, or open a fresh room.
 
 **Too many people joined, or someone joined by mistake**
-While the room is still in the lobby, click **Remove** beside their name
-on the host screen. The game deals at most 8.
+While the room is still in the lobby, the host taps **Remove** beside their
+name. The game deals at most 8.
 
-**"This browser is signed in as the host" on play.html**
-Play from another device, another browser profile, or a private window.
-
-**Start game says "Fix the story before dealing"**
+**Start game says "This story isn't ready to play"**
 The story needs exactly one KILLER and one DETECTIVE, every character
 needs a role, and the solution's killer must be the KILLER character. Fix
-it in `admin/story.html`.
+it in `admin/story.html` (which shows the secrets — ideally have someone
+who won't play it do this).
 
 **Seed page says permission denied**
 You're signed in as the wrong account, or the rules aren't published yet.
@@ -415,17 +423,16 @@ browser console for the first error, not the last.
 ## File map
 
 ```
-play.html            player's phone — join, envelope, card, clues, vote
-host.html            your control panel — pacing, clues, reveal
-admin/login.html     host + editor sign-in
+play.html            the home page — join, or host: pick a story, deal, pace;
+                     envelope, card, clues, vote, reveal
+admin/login.html     story-editor sign-in
 admin/story.html     story editor
-admin/seed.html      run once, section 7
-css/game.css         player styling
-css/admin.css        host + admin styling
+admin/seed.html      run once, section 7 (not in git, not deployed)
+css/game.css         player + host styling
+css/admin.css        editor styling
 js/firebase-init.js  your config goes here (section 5)
-js/game.js           player logic and realtime listeners
-js/host.js           host controls
+js/game.js           player and host logic, realtime listeners
 js/admin.js          story create/edit
-js/admin-seed.js     The Speckled Band story data
+js/admin-seed.js     The Speckled Band story data (not in git, not deployed)
 firestore.rules      paste into console (section 6)
 ```

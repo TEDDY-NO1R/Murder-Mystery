@@ -8,14 +8,16 @@ A murder mystery party game for people sitting in the same room.
 
 Everyone joins with a room code. Each guest's phone becomes their private
 character card — their name, their secret, what they want from the evening.
-One person hosts from a laptop: they see a control panel, deal the parts,
-release clues one at a time, and move the evening through its phases. Nobody
-reads a booklet, and nobody has to be the person who already knows the ending.
+Anyone can host: they pick a story, open a room, and play like everyone else.
+Their phone deals the parts, and they release clues and move the evening
+through its phases with a few buttons — but nothing secret is ever shown on
+their screen. Nobody reads a booklet, and nobody has to be the person who
+already knows the ending.
 
 Play it at **[murder-mystery-online.netlify.app](https://murder-mystery-online.netlify.app)**.
 
-Ships with one story: *The Speckled Band Mystery*, adapted from Arthur Conan
-Doyle (public domain). Four to six players, about ninety minutes.
+Ships with one story: *The Speckled Band*, adapted from Arthur Conan Doyle
+(public domain). Three to eight players, sixty to ninety minutes.
 
 ---
 
@@ -23,9 +25,9 @@ Doyle (public domain). Four to six players, about ninety minutes.
 
 | | |
 |---|---|
-| **Players** | `play.html` — join, open a sealed envelope, read your card, follow the clue feed, accuse |
-| **Host** | `host.html` — room code, live roster, deal, release clues, advance phases, trigger the reveal |
-| **Editor** | `admin/story.html` — write and edit stories, characters and clues |
+| **Players** | `play.html` (the home page) — join, open a sealed envelope, read your card, follow the clue feed, accuse |
+| **Host** | the same page → **Host a game** — pick a story, open a room, start, release clues, advance phases, reveal, close. The host plays too. |
+| **Editor** | `admin/story.html` — write, edit and publish stories (only published stories appear in the host's list) |
 
 Roles scale with the table: three players is Killer, Detective and Suspect;
 four adds a Witness; five adds an Accomplice; six to eight add more Suspects.
@@ -35,31 +37,29 @@ for everyone by getting it wrong.
 Phases run `lobby → arrival → investigation → confrontation → accusation →
 reveal`, advanced by the host, never on a timer.
 
-## Secrets
+## Secrets — honour system (since Oct 2026)
 
-The whole design rests on one rule: **a phone can only download the character
-it owns.** Not hidden by the interface — refused by the database.
+Anyone can host, and the host plays too, so the host's phone does the
+dealing. To deal, it must read the story — so **story data is readable by
+any signed-in browser**, and the secrecy of the ending rests on the host's
+screen never showing it, not on the database. Someone opening DevTools to dig
+for it could find it. That trade-off was chosen deliberately; making it
+cheat-proof would need a server-side dealer (e.g. a Netlify or Cloud
+Function), which can be added later.
 
-- Nothing under `/stories` is readable by a player. Not the characters, not
-  the clues, not the metadata. The host copies the public parts (story title,
-  synopsis, each released clue) into the session document.
-- Characters live in a **subcollection**, never as an array on the story
-  document. Firestore returns whole documents or nothing, so an array field
-  could not be secured while the title stayed readable.
-- At game start the host deals each character into
-  `sessions/{code}/private/{uid}`, whose read rule is one condition:
-  `request.auth.uid == uid`. Listing that collection is admin-only, so it
-  cannot be pulled in a single query.
-- Clue text reaches a session only when the host releases it. An unreleased
-  clue was never transmitted.
-- The solution's read rule is gated on the live phase — it is genuinely
-  unfetchable until the host reaches the reveal.
-- Players authenticate anonymously; the host signs in with email and password.
-  The rules treat anonymous as untrusted throughout.
+What is still enforced by the rules:
 
-The test that matters: open DevTools as a player and try to read another
-character. You get `Missing or insufficient permissions` from Google's
-servers, not filtered data.
+- Only the story editor (email login on the allowlist) can **write** stories.
+- Only a room's own host can deal, pace, release clues or close it; a live
+  room cannot be taken over by guessing its code.
+- Each player's card is at `sessions/{code}/private/{uid}`; other players are
+  refused it.
+- Joining only while the lobby is open; one final vote per dealt player, for
+  another dealt character; the ending is unreadable from the room until the
+  reveal; leftovers of a closed room are unreadable.
+
+The host's screen shows buttons and counts only. Clues are released without a
+preview, so the host reads each one at the same moment as everyone else.
 
 ## Stack
 
@@ -70,8 +70,8 @@ an empty build command.
 Setup lives in [SETUP.md](SETUP.md) — Firebase project, security rules,
 seeding and deployment, in order.
 
-> `js/admin-seed.js` is deliberately not in this repository. It holds every
-> secret in The Speckled Band, including the solution. It is a one-time
+> `js/admin-seed.js` is deliberately not in this repository: the repo is
+> public and that file is the whole story, ending included. It is a one-time
 > seeding script run from `localhost`; afterwards the story lives in Firestore
 > and is edited through the story editor.
 

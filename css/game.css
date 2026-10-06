@@ -422,4 +422,80 @@ textarea { min-height: 14rem; resize: vertical; line-height: 1.7; }
 .cast-list .role.DETECTIVE { color: var(--gold); }
 .cast-list .cast-player { color: var(--smoke); font-size: .875rem; }
 
+/* ── Join / host choice ──────────────────────────────────── */
+
+.or {
+  display: flex; align-items: center; gap: .875rem;
+  margin: 2rem 0 0;
+  color: var(--smoke);
+  font-size: .8125rem; letter-spacing: .18em; text-transform: uppercase;
+}
+.or::before, .or::after { content: ''; flex: 1; height: 1px; background: var(--hairline); }
+.or + .btn { margin-top: 1.25rem; }
+
+.link-btn {
+  display: block;
+  margin: 1.25rem auto 0;
+  padding: .5rem;
+  background: none; border: 0;
+  color: var(--smoke);
+  font: 400 .9375rem/1 var(--serif);
+  text-decoration: underline; text-underline-offset: 3px;
+  cursor: pointer;
+}
+.link-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ── Story picker ────────────────────────────────────────── */
+
+.story-list { list-style: none; margin: 0; padding: 0; }
+.story-list li { margin: 0 0 .75rem; }
+.story-list button {
+  display: block; width: 100%;
+  padding: 1rem 1.125rem;
+  background: rgba(245,233,201,.04);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  color: var(--parchment);
+  font: 400 1rem/1.45 var(--serif);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .16s, background .16s;
+}
+.story-list button[aria-pressed="true"] { border-color: var(--gold); background: rgba(200,168,75,.1); }
+.story-list .story-title { display: block; font: 700 1.1875rem/1.25 var(--display); margin: 0 0 .25rem; }
+.story-list .story-blurb { display: block; color: #c2b596; font-style: italic; }
+.story-list .story-meta  { display: block; color: var(--smoke); font-size: .8125rem; margin-top: .5rem; letter-spacing: .04em; }
+
+/* ── Host controls ───────────────────────────────────────── */
+
+.guest-list .kick {
+  margin-left: auto;
+  padding: .25rem .5rem;
+  background: none;
+  border: 1px solid rgba(107,99,85,.4);
+  border-radius: var(--radius);
+  color: var(--smoke);
+  font: 400 .75rem/1 var(--serif);
+  letter-spacing: .08em; text-transform: uppercase;
+  cursor: pointer;
+}
+
+.host-bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  padding: .875rem var(--pad) calc(.5rem + env(safe-area-inset-bottom));
+  background: var(--bg-raised);
+  border-top: 1px solid var(--hairline);
+  box-shadow: 0 -10px 30px rgba(0,0,0,.45);
+}
+.host-bar > * { max-width: 34rem; margin-left: auto; margin-right: auto; }
+.host-bar-status { margin: 0 0 .625rem; font-size: .875rem; color: #cdbf9e; }
+.host-bar-status .eyebrow { display: inline; margin-right: .375rem; }
+.host-bar-actions { display: flex; gap: .625rem; }
+.host-bar .btn { margin: 0; padding: .8125rem .75rem; font-size: .8125rem; letter-spacing: .1em; }
+.host-bar .error { margin: .5rem auto 0; }
+.host-bar .link-btn { margin-top: .375rem; font-size: .8125rem; }
+
+/* Keep the end of every screen clear of the fixed host bar */
+body.has-host-bar .wrap { padding-bottom: 12rem; }
+
 [hidden] { display: none !important; }

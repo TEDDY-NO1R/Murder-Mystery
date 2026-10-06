@@ -13,8 +13,7 @@
 //
 //  SAFE TO SHIP: this file is downloaded by every player's phone.
 //  Nothing story-related may ever be added to it — no character
-//  names, no clues, no solutions. Story data lives in Firestore
-//  and is gated by firestore.rules.
+//  names, no clues, no solutions. Story data lives in Firestore.
 // ============================================================
 
 // Firebase JS SDK v10, modular, straight from the CDN.
@@ -164,21 +163,13 @@ export function normaliseRoomCode(input) {
 // the phone a throwaway UID. That UID is what firestore.rules
 // matches against sessions/{id}/private/{uid}.
 //
-// Never reuses a host login. Auth is shared by every tab in a
-// browser profile, so play.html opened beside host.html would
-// otherwise act with the host's admin rights — not a real player,
-// and useless for testing what a player can see. Signing the host
-// out here would end the host's game, so refuse instead.
-// (Tabs in one profile also share the same anonymous player, so
-// each test player needs its own profile or private window.)
+// A browser already signed in to the story editor plays under that
+// login instead; hosting and playing need no special rights, so it
+// behaves like any other player. Tabs in one browser profile share
+// one identity, so each test player needs its own device, profile
+// or private window.
 export async function signInPlayer() {
-  const current = auth.currentUser;
-  if (current && current.isAnonymous) return current;
-  if (current) {
-    const err = new Error('Signed in as the host in this browser.');
-    err.code = 'mm/host-signed-in';
-    throw err;
-  }
+  if (auth.currentUser) return auth.currentUser;
   const { user } = await signInAnonymously(auth);
   return user;
 }
@@ -226,8 +217,7 @@ const ERROR_TEXT = {
   'auth/operation-not-allowed':       'That sign-in method is switched off in the Firebase console.',
   'auth/unauthorized-domain':         'This web address is not in the Firebase authorised domains list.',
   'unavailable':                      'Cannot reach the server. Check the connection.',
-  'not-found':                        'That does not exist.',
-  'mm/host-signed-in':                'This browser is signed in as the host. To play, use another device, browser profile or a private window.'
+  'not-found':                        'That does not exist.'
 };
 
 export function describeError(err) {
