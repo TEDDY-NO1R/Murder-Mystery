@@ -1,6 +1,6 @@
 # Handoff — read this first
 
-Current as of 6 Oct 2026. If you are a fresh Claude session or a future
+Current as of 6 Oct 2026 (end of day). If you are a fresh Claude session or a future
 me, this is the whole state of play. Earlier designs are in git history.
 
 ---
@@ -31,6 +31,32 @@ Read `README.md` for the game, `SETUP.md` for setup and deployment.
 | *The Speckled Band* (`the-speckled-band`) seeded and published | done, 6 Oct 2026 |
 | Live 3-player test (host + 2 players joined) | done, 6 Oct 2026 |
 | Old pre-2026 stories in Firestore | being deleted by the owner via the story editor |
+| Editor **Rooms** tab (`edb4310`) | deployed 6 Oct 2026 — tested on a mock only |
+| Table alerts, round timer, screen awake (`0c8a78d`) | deployed 6 Oct 2026 — tested on a mock only |
+| Editor copy / export / import JSON (`0fb8591`) | deployed 6 Oct 2026 — tested on a mock only |
+
+### Not yet verified for real
+
+Each of the three features above passed a mocked-Firestore test in a
+browser, but none has touched the real database or real phones yet:
+
+1. **Export a backup of *The Speckled Band*** (editor → Export JSON) —
+   none exists outside Firestore and the one PC's seed file. Do this
+   first.
+2. **Rooms tab:** make a small edit on a test story, save, reload.
+3. **Alerts and timer:** a game with 3+ phones — release a clue (banner,
+   chime, buzz on every phone; no buzz on iPhone, chime only after a tap)
+   and start a 5-minute timer. Check a phone left alone doesn't sleep.
+4. **Copy / import:** copy a story, import an export under a new id,
+   delete both.
+
+### Next feature candidates
+
+- **Cheat-proof dealing** — see the security model below. Needs the owner
+  to create a Firebase service-account key and add it to Netlify's
+  environment variables.
+- **A second story** — public domain, written to the data shapes below.
+  Its text must never appear in chat (the owner plays).
 
 ---
 
@@ -182,9 +208,23 @@ refuses to deal otherwise.
 ## Working on this machine
 
 - **git** is installed (Git for Windows, via `winget install Git.Git`,
-  Oct 2026) and on PATH. Commits work from the CLI; push with GitHub
-  Desktop's **Push origin** or sign in once when the CLI first pushes.
-  Netlify deploys `main` automatically.
+  Oct 2026) and on PATH. Commits work from the CLI, but the CLI has no
+  GitHub login, so **push with GitHub Desktop's Push origin**
+  (`Start-Process "x-github-client://openLocalRepo/D:/Projects/Murder-Mystery"`
+  opens it on this repo). Netlify deploys `main` automatically.
+- **Local server:** `.claude/serve.ps1` is a small PowerShell
+  `HttpListener` static server — `powershell -ExecutionPolicy Bypass -File
+  .claude\serve.ps1 -Port 8767`. A `murder-mystery` entry in
+  `D:\Projects\.claude\launch.json` starts it for the Claude app's
+  browser pane.
+- **Mock tests:** `.claude/test/` holds fake Firestore modules and test
+  copies of the pages. An import map in each test page redirects
+  `/js/firebase-init.js` to the mock, so the real `game.js` / `admin.js`
+  run against in-memory data with no login: `story.html` (editor, mock
+  `mock-init.js`) and `play.html` (a mid-game room where you are the
+  host, mock `mock-game-init.js` + `seed-game.js`). Regenerate a test page
+  after changing its real page. `.claude/` is gitignored, so these exist
+  on this PC only.
 - **The seed files are per-machine.** `js/admin-seed.js` is gitignored, so
   pulling does not update it. Copy the current one across by hand before
   seeding from another PC — an old copy lacks `locations` and the
@@ -193,7 +233,10 @@ refuses to deal otherwise.
   Console → Firestore → Rules → Publish.
 - **No Node or Python.** Headless Edge
   (`C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`) with a
-  mocked Firestore module was used to test the game flow.
+  mocked Firestore module was used to test the game flow; the mocks above
+  do the same in any browser.
+- **`*.json` is gitignored** — story exports hold the ending and the repo
+  is public. The site has no JSON files of its own.
 
 ---
 
