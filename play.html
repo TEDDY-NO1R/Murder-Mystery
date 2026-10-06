@@ -151,8 +151,12 @@
       <div>
         <p class="eyebrow" id="game-phase">Investigation</p>
         <p class="bar-sub" id="game-blurb"></p>
+        <p class="round-timer" data-timer hidden></p>
       </div>
-      <button class="chip" id="game-whoami"></button>
+      <div class="bar-chips">
+        <button class="chip" id="game-whoami"></button>
+        <button class="chip quiet" data-sound aria-pressed="true">Sound on</button>
+      </div>
     </header>
 
     <nav class="tabs" role="tablist">
@@ -201,6 +205,7 @@
       <p class="eyebrow">Accusation</p>
       <h2 class="display sm">Name the killer</h2>
       <p class="lede" id="vote-lede">Choose the person you believe did it.</p>
+      <p class="round-timer" data-timer hidden></p>
       <hr class="rule">
 
       <ul class="ballot" id="ballot"></ul>
@@ -232,11 +237,24 @@
       <button type="button" class="btn sm" id="hb-clue">Release a clue</button>
       <button type="button" class="btn sm primary" id="hb-next">Next phase</button>
     </div>
+    <!-- Optional countdown everyone sees. It only alerts; the host
+         still moves the evening on by hand. -->
+    <p class="host-bar-timer" id="hb-timer">
+      <span class="eyebrow">Round timer</span>
+      <button type="button" class="link-btn" data-minutes="5">5 min</button>
+      <button type="button" class="link-btn" data-minutes="10">10 min</button>
+      <button type="button" class="link-btn" data-minutes="15">15 min</button>
+      <button type="button" class="link-btn" id="hb-timer-stop" hidden>Stop</button>
+    </p>
     <p class="error" id="hb-error" role="alert" hidden></p>
     <button type="button" class="link-btn" id="hb-close">Close room</button>
   </div>
 
 </div>
+
+<!-- Table alerts: a new clue, a new phase, evidence shown, time up.
+     Tapping one jumps to the clue feed. -->
+<button type="button" class="notice" id="notice" role="status" aria-live="polite" hidden></button>
 
 <!-- Shown until auth settles, and whenever a listener dies -->
 <div id="boot" class="screen is-on">

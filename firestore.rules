@@ -153,7 +153,8 @@ service cloud.firestore {
 
       // Anyone signed in can look up a room code they were told.
       // Contains: roomCode, storyId, storyTitle, storySynopsis,
-      // status, currentPhase, revealedClues[], hostUid, createdAt.
+      // status, currentPhase, revealedClues[], hostUid, createdAt,
+      // and an optional round timer.
       //
       // revealedClues holds the full text of clues the host has
       // already released — released clues are public to the table

@@ -333,6 +333,7 @@ async function attach(code) {
   detach();
   resetRoomState();
   state.code = code;
+  keepAwake();
 
   // Per-room memory: notes from this phone, and a vote already cast
   // (votes are final, so the ballot must stay locked after a refresh).
@@ -346,7 +347,10 @@ async function attach(code) {
   unsub.session = onSnapshot(paths.session(code),
     snap => {
       if (!snap.exists()) { leave(state.closing ? 'Room closed.' : 'The host ended this game.'); return; }
+      const prev = state.session;
       state.session = snap.data();
+      noticeSession(prev, state.session);
+      renderTimer();
       state.isHost = state.session.hostUid === state.uid;
       if (state.isHost) watchVotes(code);
       if (state.session.status !== 'open' && state.locations === null) loadLocations();
@@ -380,6 +384,7 @@ async function attach(code) {
       state.shared = snap.docs
         .map(d => ({ id: d.id, ...d.data() }))
         .sort((a, b) => (a.at?.seconds || 0) - (b.at?.seconds || 0));
+      noticeShared(state.shared);
       renderClues();
       renderSearch();
     },
@@ -479,6 +484,11 @@ function resetRoomState() {
   state.searching = false;
   picked = null;
   revealed = false;
+  sharedSeen = null;
+  timerRunning = timerAlerted = null;
+  renderTimer();
+  $('#notice').hidden = true;
+  keepAwake();
 
   ['#rooms', '#evidence', '#search-result'].forEach(sel => { $(sel).innerHTML = ''; });
   $('#search-result').dataset.key = '';
@@ -945,6 +955,186 @@ async function showEvidence(find, btn) {
 }
 
 // ------------------------------------------------------------
+//  Table alerts, round timer, screen awake
+//
+//  Phones sit face down between turns. A new clue, a new phase,
+//  evidence shown to the table, or the timer running out gets a
+//  banner, a chime and a buzz — never on the first snapshot after
+//  joining or a refresh, only for things that happen while you
+//  are here. Sound is a per-phone choice.
+// ------------------------------------------------------------
+
+const SOUND = 'mm:sound';
+const soundOn = () => { try { return localStorage.getItem(SOUND) !== 'off'; } catch { return true; } };
+
+function renderSoundToggle() {
+  const on = soundOn();
+  $$('[data-sound]').forEach(b => {
+    b.textContent = on ? 'Sound on' : 'Sound off';
+    b.setAttribute('aria-pressed', String(on));
+  });
+}
+
+$$('[data-sound]').forEach(b => b.addEventListener('click', () => {
+  try { localStorage.setItem(SOUND, soundOn() ? 'off' : 'on'); } catch { /* private mode */ }
+  renderSoundToggle();
+  if (soundOn()) chime();
+}));
+
+// Browsers only allow audio after a tap, so the context is made on
+// the first one and reused.
+let audio = null;
+document.addEventListener('pointerdown', () => {
+  if (audio) return;
+  try { audio = new (window.AudioContext || window.webkitAudioContext)(); } catch { /* no audio */ }
+}, { once: true, capture: true });
+
+// Two soft bell-ish notes, synthesised — no sound file to fetch.
+function chime() {
+  if (!audio || !soundOn()) return;
+  try {
+    if (audio.state === 'suspended') audio.resume();
+    const t0 = audio.currentTime;
+    [[659.25, 0], [987.77, .16]].forEach(([freq, at]) => {
+      const osc = audio.createOscillator();
+      const gain = audio.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, t0 + at);
+      gain.gain.linearRampToValueAtTime(.18, t0 + at + .02);
+      gain.gain.exponentialRampToValueAtTime(.0001, t0 + at + .9);
+      osc.connect(gain).connect(audio.destination);
+      osc.start(t0 + at);
+      osc.stop(t0 + at + 1);
+    });
+  } catch { /* audio unavailable */ }
+}
+
+let noticeTimer = null;
+function notify(message) {
+  const el = $('#notice');
+  el.textContent = message;
+  el.hidden = false;
+  // Restart the drop-in animation for back-to-back alerts.
+  el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
+  clearTimeout(noticeTimer);
+  noticeTimer = setTimeout(() => { el.hidden = true; }, 4500);
+  chime();
+  if (soundOn()) { try { navigator.vibrate?.([120, 60, 120]); } catch { /* unsupported */ } }
+}
+
+$('#notice').addEventListener('click', () => {
+  $('#notice').hidden = true;
+  if (state.screen === 'game') document.querySelector('.tab[data-tab="clues"]').click();
+});
+
+// Compare the previous session snapshot with the new one. `prev` is
+// null on the first snapshot after attaching, which never alerts.
+function noticeSession(prev, next) {
+  if (!prev || !next) return;
+  if (prev.currentPhase !== next.currentPhase) {
+    const meta = phaseMeta(next.currentPhase);
+    notify(next.currentPhase === 'reveal' ? 'The truth is revealed.' : `${meta.label} begins. ${meta.blurb}`);
+    return;
+  }
+  const before = (prev.revealedClues || []).length;
+  const after = (next.revealedClues || []).length;
+  if (after > before) notify(after - before === 1 ? 'A new clue has been released.' : `${after - before} new clues released.`);
+}
+
+// Evidence someone else just showed. The first snapshot is the
+// baseline, so a refresh doesn't announce everything again.
+let sharedSeen = null;
+function noticeShared(list) {
+  const ids = new Set(list.map(s => s.id));
+  if (sharedSeen) {
+    const fresh = list.filter(s => !sharedSeen.has(s.id) && s.uid !== state.uid);
+    if (fresh.length) notify(`${fresh[0].name || 'Someone'} has shown the table some evidence.`);
+  }
+  sharedSeen = ids;
+}
+
+// Round timer. The host writes { minutes, setAt: server time } and
+// every phone counts down to setAt + minutes against its own clock —
+// phone clocks are network-synced, so they agree to within a second
+// or so, which is plenty for a parlour game.
+let timerTick = null;
+let timerRunning = null;   // key of a timer seen with time left
+let timerAlerted = null;   // key of the timer already announced as done
+
+function timerEnd(t) {
+  if (!t?.minutes) return null;
+  const start = t.setAt?.toMillis ? t.setAt.toMillis() : Date.now();   // pending local write
+  return start + t.minutes * 60000;
+}
+
+function renderTimer() {
+  const t = state.session?.timer;
+  const phase = state.session?.currentPhase;
+  const end = phase && phase !== 'lobby' && phase !== 'reveal' ? timerEnd(t) : null;
+
+  if (!end) {
+    clearInterval(timerTick); timerTick = null;
+    $$('[data-timer]').forEach(el => { el.hidden = true; el.textContent = ''; });
+    return;
+  }
+
+  const left = end - Date.now();
+  const done = left <= 0;
+  const secs = Math.max(0, Math.ceil(left / 1000));
+  const text = done ? "Time's up" : `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')} left`;
+  $$('[data-timer]').forEach(el => {
+    el.hidden = false;
+    el.textContent = text;
+    el.classList.toggle('is-low', !done && secs <= 60);
+    el.classList.toggle('is-done', done);
+  });
+
+  const key = `${t.minutes}:${t.setAt?.seconds ?? 'pending'}`;
+  if (done) {
+    clearInterval(timerTick); timerTick = null;
+    // Only announce an ending we were counting towards — not one
+    // that ran out while this phone was away.
+    if (timerRunning === key && timerAlerted !== key) notify("Time's up for this round.");
+    timerAlerted = key;
+  } else {
+    timerRunning = key;
+    if (!timerTick) timerTick = setInterval(renderTimer, 1000);
+  }
+}
+
+async function setTimer(minutes) {
+  $('#hb-error').hidden = true;
+  try {
+    await updateDoc(paths.session(state.code), {
+      timer: minutes ? { minutes, setAt: serverTimestamp() } : null
+    });
+  } catch (ex) { hostFail('#hb-error', ex); }
+}
+
+$$('#hb-timer [data-minutes]').forEach(b =>
+  b.addEventListener('click', () => setTimer(Number(b.dataset.minutes))));
+$('#hb-timer-stop').addEventListener('click', () => setTimer(0));
+
+// Keep the screen from sleeping mid-game, where the browser allows
+// it. The lock is dropped whenever the page is hidden, so take it
+// again on return.
+let wakeLock = null;
+async function keepAwake() {
+  const want = !!state.code && document.visibilityState === 'visible';
+  try {
+    if (want && !wakeLock && navigator.wakeLock) {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    } else if (!want && wakeLock) {
+      await wakeLock.release();
+      wakeLock = null;
+    }
+  } catch { /* refused, e.g. battery saver */ }
+}
+document.addEventListener('visibilitychange', keepAwake);
+
+// ------------------------------------------------------------
 //  Host controls
 //
 //  Everything here shows counts and phase names only. Clue text
@@ -998,6 +1188,9 @@ function renderHostControls() {
   const nextBtn = $('#hb-next');
   nextBtn.hidden = !next;
   nextBtn.textContent = next === 'reveal' ? 'Reveal the truth' : (next ? `Next: ${phaseMeta(next).label}` : '');
+
+  $('#hb-timer').hidden = phase === 'reveal';
+  $('#hb-timer-stop').hidden = !s.timer;
 
   if (hosting && state.hostClues === null) loadHostClues();
 }
@@ -1078,6 +1271,7 @@ $('#hb-next').addEventListener('click', async () => {
   try {
     await updateDoc(paths.session(state.code), {
       currentPhase: next,
+      timer: null,                       // each round's timer is its own
       ...(next === 'reveal' ? { status: 'ended' } : {})
     });
   } catch (ex) { hostFail('#hb-error', ex); }
@@ -1486,6 +1680,7 @@ async function renderReveal() {
   }
 
   boot('Lighting the lamps');
+  renderSoundToggle();
 
   try {
     await waitForAuth();

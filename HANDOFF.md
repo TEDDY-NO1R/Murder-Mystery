@@ -56,6 +56,14 @@ Read `README.md` for the game, `SETUP.md` for setup and deployment.
    searched where is public. Rooms live in `stories/{id}/locations` and
    are seeded from `js/admin-seed.js` and edited in the story editor's
    **Rooms** tab. Keep find ids stable: live games record claims by id.
+6. **Table alerts and round timer** (added Oct 2026): a new clue, a new
+   phase, evidence shown by someone else, or the timer running out gets
+   a banner, a synthesised chime and a vibration (per-phone **Sound**
+   toggle). Nothing alerts on the first snapshot after joining or a
+   refresh. The host can start a 5/10/15-minute countdown that every
+   phone shows; it only alerts — phases still advance by hand — and is
+   cleared on each phase change. Phones ask to keep the screen awake
+   during a game (Wake Lock API, where supported).
 
 Everything is in `js/game.js`; the page is `play.html` (served at `/`).
 
@@ -136,7 +144,8 @@ sessions/{ROOMCODE}                    doc id IS the room code
   roomCode, storyId, storyTitle, storySynopsis,
   status ('open'|'live'|'ended'), currentPhase,
   revealedClues[], hostUid, createdAt,
-  castIds[] (sorted dealt character ids), startedAt
+  castIds[] (sorted dealt character ids), startedAt,
+  timer: { minutes, setAt (server time) } | null
 
 sessions/{ROOMCODE}/players/{uid}      public in-game
   name, joinedAt, characterId, characterName   (never role)
