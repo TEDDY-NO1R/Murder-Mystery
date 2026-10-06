@@ -149,9 +149,8 @@ service cloud.firestore {
       //
       // revealedClues holds the full text of clues the host has
       // already released — released clues are public to the table
-      // by definition. Unreleased ones stay in /stories, which
-      // players cannot read. No character, role or solution data
-      // ever goes in this document.
+      // by definition. No character, role or solution data ever
+      // goes in this document.
       allow get: if isSignedIn();
 
       allow list: if isAdmin();
