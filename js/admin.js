@@ -2,7 +2,7 @@
 //  MURDER MYSTERY — story editor
 // ============================================================
 //
-//  CRUD over /stories and its two subcollections. Writing any of
+//  CRUD over /stories and its three subcollections. Writing any of
 //  them needs the story-editor login on the allowlist in
 //  firestore.rules; anyone else is bounced to the login page.
 //
@@ -14,7 +14,7 @@ import {
   waitForAuth, signOutNow, describeError,
   db, paths, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
   deleteField, writeBatch,
-  PHASES, PHASE_IDS, phaseMeta, ROLES, ROLE_FIELDS,
+  PHASES, PHASE_IDS, SEARCH_PHASES, phaseMeta, ROLES, ROLE_FIELDS,
   MIN_PLAYERS, MAX_PLAYERS, IS_FILE_PROTOCOL
 } from './firebase-init.js';
 
@@ -26,6 +26,7 @@ const state = {
   story:   null,
   chars:   [],
   phases:  {},     // phaseId -> { name, order, clues[] }
+  rooms:   [],     // [{id, name, blurb, order, finds[]}]
   editing: null    // character id being edited, or '' for new
 };
 
@@ -122,12 +123,18 @@ async function selectStory(id) {
     const phases = await getDocs(paths.storyPhases(id));
     state.phases = Object.fromEntries(phases.docs.map(d => [d.id, d.data()]));
 
+    const rooms = await getDocs(paths.locations(id));
+    state.rooms = rooms.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (a.order || 99) - (b.order || 99));
+
     $('editor').hidden = false;
     $('editing-id').textContent = id;
 
     renderDetails();
     renderChars();
     renderClues();
+    renderRooms();
   } catch (ex) { fail(ex); }
 }
 
@@ -461,6 +468,182 @@ $('save-clues').addEventListener('click', async () => {
     await batch.commit();
     await selectStory(state.id);
     toast('Clues saved.');
+  } catch (ex) { fail(ex); } finally { btn.disabled = false; }
+});
+
+// ------------------------------------------------------------
+//  Rooms (searchable locations)
+// ------------------------------------------------------------
+//
+//  Find ids are what a live game records in sessions/{code}/finds,
+//  so an existing find keeps its id however its text is edited.
+
+const newFindId = () => `find-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+
+function renderRooms() {
+  const host = $('room-editor');
+  host.innerHTML = '';
+  state.rooms.forEach(r => host.appendChild(roomCard(r, true)));
+}
+
+function roomCard(room, saved) {
+  const card = document.createElement('div');
+  card.className = 'room-card';
+  card.dataset.saved = saved ? 'yes' : '';
+
+  const head = document.createElement('div');
+  head.style.cssText = 'display:grid;grid-template-columns:1fr 6rem;gap:0 1rem';
+
+  const idWrap = document.createElement('div');
+  const idLab = document.createElement('label');
+  idLab.innerHTML = 'Id <span class="dim">— document name</span>';
+  const id = document.createElement('input');
+  id.dataset.field = 'id';
+  id.value = room.id || '';
+  id.disabled = saved;                   // ids are document names
+  idWrap.append(idLab, id);
+
+  const ordWrap = document.createElement('div');
+  const ordLab = document.createElement('label');
+  ordLab.textContent = 'Order';
+  const ord = document.createElement('input');
+  ord.type = 'number'; ord.min = '1';
+  ord.dataset.field = 'order';
+  ord.value = room.order ?? (state.rooms.length + 1);
+  ordWrap.append(ordLab, ord);
+  head.append(idWrap, ordWrap);
+
+  const nameLab = document.createElement('label');
+  nameLab.textContent = 'Room name';
+  const name = document.createElement('input');
+  name.dataset.field = 'name';
+  name.placeholder = "The Doctor's Study";
+  name.value = room.name || '';
+
+  const blurbLab = document.createElement('label');
+  blurbLab.innerHTML = 'Blurb <span class="dim">— everyone sees this on the room button</span>';
+  const blurb = document.createElement('input');
+  blurb.dataset.field = 'blurb';
+  blurb.value = room.blurb || '';
+
+  const fh = document.createElement('p');
+  fh.className = 'phase-group';
+  fh.textContent = 'Finds — claimed top to bottom';
+
+  const finds = document.createElement('div');
+  finds.className = 'finds';
+  (room.finds || []).forEach(f => finds.appendChild(findRow(f)));
+
+  const row = document.createElement('div');
+  row.className = 'btn-row';
+  row.style.marginTop = '.75rem';
+
+  const add = document.createElement('button');
+  add.className = 'btn ghost sm';
+  add.type = 'button';
+  add.textContent = 'Add find';
+  add.addEventListener('click', () => finds.appendChild(findRow({ id: newFindId(), phase: SEARCH_PHASES[0] })));
+
+  const del = document.createElement('button');
+  del.className = 'btn danger sm';
+  del.type = 'button';
+  del.textContent = 'Remove room';
+  del.addEventListener('click', () => {
+    if (saved && !confirm(`Remove "${room.name || room.id}" and its finds? Takes effect when you save rooms.`)) return;
+    card.remove();
+  });
+
+  row.append(add, del);
+  card.append(head, nameLab, name, blurbLab, blurb, fh, finds, row, Object.assign(document.createElement('hr'), { className: 'rule' }));
+  return card;
+}
+
+function findRow(f) {
+  const row = document.createElement('div');
+  row.className = 'clue';
+  row.dataset.findId = f.id;
+
+  const fields = document.createElement('div');
+
+  const phase = document.createElement('select');
+  phase.dataset.field = 'phase';
+  SEARCH_PHASES.forEach(p => {
+    const o = document.createElement('option');
+    o.value = p;
+    o.textContent = `From ${phaseMeta(p).label.toLowerCase()}`;
+    phase.appendChild(o);
+  });
+  phase.value = SEARCH_PHASES.includes(f.phase) ? f.phase : SEARCH_PHASES[0];
+
+  const title = document.createElement('input');
+  title.value = f.title || '';
+  title.placeholder = 'Find title';
+  title.dataset.field = 'title';
+  title.style.marginTop = '.5rem';
+
+  const text = document.createElement('textarea');
+  text.value = f.text || '';
+  text.placeholder = 'What the finder reads';
+  text.dataset.field = 'text';
+  text.style.marginTop = '.5rem';
+
+  fields.append(phase, title, text);
+
+  const del = document.createElement('button');
+  del.className = 'btn ghost sm';
+  del.type = 'button';
+  del.textContent = 'Remove';
+  del.addEventListener('click', () => row.remove());
+
+  row.append(fields, del);
+  return row;
+}
+
+$('new-room').addEventListener('click', () => {
+  const card = roomCard({ order: $('room-editor').children.length + 1, finds: [] }, false);
+  $('room-editor').appendChild(card);
+  card.querySelector('[data-field="id"]').focus();
+});
+
+$('save-rooms').addEventListener('click', async () => {
+  const btn = $('save-rooms');
+  btn.disabled = true;
+  try {
+    const val = (el, f) => el.querySelector(`[data-field="${f}"]`).value.trim();
+    const rooms = Array.from($('room-editor').querySelectorAll('.room-card')).map(card => ({
+      id:    val(card, 'id').toLowerCase().replace(/[^a-z0-9-]/g, '-'),
+      name:  val(card, 'name'),
+      blurb: val(card, 'blurb'),
+      order: Number(val(card, 'order')) || 99,
+      finds: Array.from(card.querySelectorAll('.finds .clue')).map(row => ({
+        id:    row.dataset.findId,
+        title: val(row, 'title'),
+        text:  val(row, 'text'),
+        phase: val(row, 'phase')
+      })).filter(f => f.title || f.text)
+    }));
+
+    const ids = new Set();
+    rooms.forEach(r => {
+      if (!r.id)   throw new Error('Every room needs an id.');
+      if (!r.name) throw new Error(`Room "${r.id}" needs a name.`);
+      if (ids.has(r.id)) throw new Error(`Two rooms share the id "${r.id}".`);
+      ids.add(r.id);
+    });
+    // A live game keys claims by find id across the whole story.
+    const findIds = new Set();
+    rooms.flatMap(r => r.finds).forEach(f => {
+      if (findIds.has(f.id)) throw new Error(`Two finds share the id "${f.id}".`);
+      findIds.add(f.id);
+    });
+
+    const batch = writeBatch(db);
+    state.rooms.filter(r => !ids.has(r.id)).forEach(r => batch.delete(paths.location(r.id, state.id)));
+    rooms.forEach(({ id, ...data }) => batch.set(paths.location(id, state.id), data));
+    await batch.commit();
+
+    await selectStory(state.id);
+    toast('Rooms saved.');
   } catch (ex) { fail(ex); } finally { btn.disabled = false; }
 });
 

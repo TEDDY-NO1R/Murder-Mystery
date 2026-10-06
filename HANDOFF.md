@@ -54,7 +54,8 @@ Read `README.md` for the game, `SETUP.md` for setup and deployment.
    unclaimed find in that room whose phase has been reached (first come,
    first served); finds are private until shown to the table, and who
    searched where is public. Rooms live in `stories/{id}/locations` and
-   are seeded from `js/admin-seed.js` (not editable in the editor yet).
+   are seeded from `js/admin-seed.js` and edited in the story editor's
+   **Rooms** tab. Keep find ids stable: live games record claims by id.
 
 Everything is in `js/game.js`; the page is `play.html` (served at `/`).
 
@@ -161,10 +162,14 @@ refuses to deal otherwise.
 
 ## Working on this machine
 
-- **git is not on PATH.** Use GitHub Desktop's bundled git:
-  `%LOCALAPPDATA%\GitHubDesktop\app-<version>\resources\app\git\cmd\git.exe`.
-  It can commit; pushing needs GitHub Desktop's **Push origin** (the CLI has
-  no stored credentials). Netlify deploys `main` automatically.
+- **git** is installed (Git for Windows, via `winget install Git.Git`,
+  Oct 2026) and on PATH. Commits work from the CLI; push with GitHub
+  Desktop's **Push origin** or sign in once when the CLI first pushes.
+  Netlify deploys `main` automatically.
+- **The seed files are per-machine.** `js/admin-seed.js` is gitignored, so
+  pulling does not update it. Copy the current one across by hand before
+  seeding from another PC — an old copy lacks `locations` and the
+  `the-speckled-band` id.
 - **Rules** are published by pasting `firestore.rules` into Firebase
   Console → Firestore → Rules → Publish.
 - **No Node or Python.** Headless Edge

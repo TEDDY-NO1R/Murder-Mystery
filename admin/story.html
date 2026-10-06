@@ -52,6 +52,7 @@
           <li data-tab="details" class="now">Details</li>
           <li data-tab="characters">Characters</li>
           <li data-tab="clues">Clues</li>
+          <li data-tab="rooms">Rooms</li>
         </ul>
 
         <!-- ── Details ── -->
@@ -175,6 +176,21 @@
           <div id="clue-editor"></div>
           <div class="btn-row" style="margin-top:1.5rem">
             <button class="btn primary" id="save-clues">Save clues</button>
+          </div>
+        </section>
+
+        <!-- ── Rooms ── -->
+        <section data-panel="rooms" hidden>
+          <p class="small dim" style="margin-top:0">
+            Rooms players can search in arrival, investigation and
+            confrontation. A search takes the first unclaimed find whose
+            round has been reached, top to bottom. Leave a story with no
+            rooms and the Search tab simply never appears.
+          </p>
+          <div id="room-editor"></div>
+          <div class="btn-row" style="margin-top:1.5rem">
+            <button class="btn sm" id="new-room" type="button">Add room</button>
+            <button class="btn primary" id="save-rooms">Save rooms</button>
           </div>
         </section>
 
