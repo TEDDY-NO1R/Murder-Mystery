@@ -116,6 +116,16 @@ Node on the owner's PC — a small PowerShell `HttpListener` script works),
 open `/admin/seed.html`, sign in as the editor, click Seed. It shows counts
 only.
 
+**Backups and copies** (story editor, Oct 2026): **Export JSON** downloads
+a story with all its characters, phases and rooms as one file
+(`format: "murder-mystery-story"`, `version: 1`; Timestamps travel as
+`{ "$timestamp": ISO }`). **Import JSON** writes one back, replacing any
+story with that id, children included, after a confirm. Imported under
+its own id it keeps its status; under a new id it comes in as a draft.
+**Copy** duplicates the open story under a new id, as a draft. Export
+files hold the ending, so keep them out of git and out of chat — they
+are the recommended backup, since the seed file exists on one PC only.
+
 The owner plays the game: **never reveal story contents in chat.**
 
 ---

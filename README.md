@@ -27,7 +27,7 @@ Ships with one story: *The Speckled Band*, adapted from Arthur Conan Doyle
 |---|---|
 | **Players** | `play.html` (the home page) — join, open a sealed envelope, read your card, follow the clue feed, accuse |
 | **Host** | the same page → **Host a game** — pick a story, open a room, start, release clues, advance phases, reveal, close. The host plays too. |
-| **Editor** | `admin/story.html` — write, edit and publish stories (only published stories appear in the host's list) |
+| **Editor** | `admin/story.html` — write, edit and publish stories (only published stories appear in the host's list); copy a story, or export/import it as JSON for backups |
 
 Roles scale with the table: three players is Killer, Detective and Suspect;
 four adds a Witness; five adds an Accomplice; six to eight add more Suspects.

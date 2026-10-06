@@ -13,7 +13,7 @@
 import {
   waitForAuth, signOutNow, describeError,
   db, paths, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
-  deleteField, writeBatch,
+  deleteField, writeBatch, Timestamp,
   PHASES, PHASE_IDS, SEARCH_PHASES, phaseMeta, ROLES, ROLE_FIELDS,
   MIN_PLAYERS, MAX_PLAYERS, IS_FILE_PROTOCOL
 } from './firebase-init.js';
@@ -670,6 +670,159 @@ $('new-btn').addEventListener('click', async () => {
     await loadStories();
     await selectStory(id);
     toast('Story created.');
+  } catch (ex) { fail(ex); }
+});
+
+// ------------------------------------------------------------
+//  Copy, export, import
+//
+//  A story travels as one JSON "bundle": the story document plus
+//  every document in its three subcollections. Exporting is the
+//  only backup outside Firestore — the seed file lives on one PC —
+//  and a copy is the quickest way to start a new story from an
+//  old one's shape.
+// ------------------------------------------------------------
+
+const BUNDLE_FORMAT = 'murder-mystery-story';
+const SUBCOLLECTIONS = { characters: paths.characters, phases: paths.storyPhases, locations: paths.locations };
+const SUBDOC = { characters: paths.character, phases: paths.storyPhase, locations: paths.location };
+
+const slug = raw => String(raw || '').trim().toLowerCase().replace(/[^a-z0-9-]/g, '-');
+
+// Firestore Timestamps don't survive JSON, so they travel tagged.
+function toPlain(v) {
+  if (v instanceof Timestamp) return { $timestamp: v.toDate().toISOString() };
+  if (Array.isArray(v)) return v.map(toPlain);
+  if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, toPlain(x)]));
+  return v;
+}
+function fromPlain(v) {
+  if (Array.isArray(v)) return v.map(fromPlain);
+  if (v && typeof v === 'object') {
+    if (typeof v.$timestamp === 'string') return Timestamp.fromDate(new Date(v.$timestamp));
+    return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, fromPlain(x)]));
+  }
+  return v;
+}
+
+async function readBundle(id) {
+  const snap = await getDoc(paths.story(id));
+  if (!snap.exists()) throw new Error(`Story "${id}" no longer exists.`);
+  const bundle = { format: BUNDLE_FORMAT, version: 1, exportedAt: new Date().toISOString(), id, story: toPlain(snap.data()) };
+  for (const [name, col] of Object.entries(SUBCOLLECTIONS)) {
+    bundle[name] = Object.fromEntries((await getDocs(col(id))).docs.map(d => [d.id, toPlain(d.data())]));
+  }
+  return bundle;
+}
+
+function checkBundle(b) {
+  if (!b || b.format !== BUNDLE_FORMAT) throw new Error('That file is not a story exported from this editor.');
+  if (b.version !== 1) throw new Error(`Unsupported story file version: ${b.version}.`);
+  if (!b.story || typeof b.story !== 'object') throw new Error('The file has no story details.');
+  Object.keys(SUBCOLLECTIONS).forEach(name => {
+    if (b[name] !== undefined && (typeof b[name] !== 'object' || Array.isArray(b[name]))) {
+      throw new Error(`The file's ${name} are malformed.`);
+    }
+    Object.keys(b[name] || {}).forEach(docId => {
+      if (!docId || docId.includes('/')) throw new Error(`Bad ${name} id "${docId}".`);
+    });
+  });
+}
+
+// Write a bundle as story `id`, replacing anything already there —
+// including children the bundle doesn't have, so a replaced story
+// can't keep stray characters or rooms.
+async function writeBundle(id, b) {
+  const ops = [];
+  for (const [name, col] of Object.entries(SUBCOLLECTIONS)) {
+    // set() replaces a document whole, so only children the bundle
+    // lacks need deleting.
+    (await getDocs(col(id))).docs
+      .filter(d => !(b[name] && Object.hasOwn(b[name], d.id)))
+      .forEach(d => ops.push(batch => batch.delete(d.ref)));
+  }
+  ops.push(batch => batch.set(paths.story(id), fromPlain(b.story)));
+  for (const [name, docRef] of Object.entries(SUBDOC)) {
+    Object.entries(b[name] || {}).forEach(([docId, data]) =>
+      ops.push(batch => batch.set(docRef(docId, id), fromPlain(data))));
+  }
+  for (let i = 0; i < ops.length; i += 400) {
+    const batch = writeBatch(db);
+    ops.slice(i, i + 400).forEach(op => op(batch));
+    await batch.commit();
+  }
+}
+
+// Ask for a story id; null if cancelled. Overwriting an existing
+// story needs a second, explicit yes.
+async function askStoryId(message, suggestion, { notId = null } = {}) {
+  const raw = prompt(message, suggestion);
+  if (!raw) return null;
+  const id = slug(raw);
+  if (!id) return null;
+  if (id === notId) throw new Error('Pick a different id for the copy.');
+  if ((await getDoc(paths.story(id))).exists()
+      && !confirm(`A story called "${id}" already exists. Replace it — details, characters, clues and rooms — with this one?`)) {
+    return null;
+  }
+  return id;
+}
+
+$('copy-story').addEventListener('click', async () => {
+  if (!state.id) return;
+  const btn = $('copy-story');
+  btn.disabled = true;
+  try {
+    const id = await askStoryId('Id for the copy (letters, numbers and hyphens):', `${state.id}-copy`, { notId: state.id });
+    if (!id) return;
+    const b = await readBundle(state.id);
+    // A copy starts life as a draft, so it can't appear in the
+    // host's list half-edited.
+    b.story = { ...b.story, title: `Copy of ${b.story.title || state.id}`, status: 'draft' };
+    await writeBundle(id, b);
+    await loadStories();
+    await selectStory(id);
+    toast('Story copied as a draft.');
+  } catch (ex) { fail(ex); } finally { btn.disabled = false; }
+});
+
+$('export-story').addEventListener('click', async () => {
+  if (!state.id) return;
+  try {
+    const b = await readBundle(state.id);
+    const url = URL.createObjectURL(new Blob([JSON.stringify(b, null, 2)], { type: 'application/json' }));
+    const a = Object.assign(document.createElement('a'), {
+      href: url, download: `${state.id}-${new Date().toISOString().slice(0, 10)}.json`
+    });
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast('Exported. The file contains the ending — keep it somewhere private.');
+  } catch (ex) { fail(ex); }
+});
+
+$('import-btn').addEventListener('click', () => $('import-file').click());
+
+$('import-file').addEventListener('change', async e => {
+  const file = e.target.files?.[0];
+  e.target.value = '';                 // let the same file be picked again
+  if (!file) return;
+  try {
+    let b;
+    try { b = JSON.parse(await file.text()); }
+    catch { throw new Error('That file is not valid JSON.'); }
+    checkBundle(b);
+    const id = await askStoryId('Import as story id:', b.id || slug(file.name.replace(/\.json$/i, '')));
+    if (!id) return;
+    // Restoring a backup under its own id keeps its status; under a
+    // new id it is a second story, so it waits as a draft.
+    if (id !== b.id) b.story = { ...b.story, status: 'draft' };
+    await writeBundle(id, b);
+    await loadStories();
+    await selectStory(id);
+    const n =(name, word) => { const k = Object.keys(b[name] || {}).length; return `${k} ${word}${k === 1 ? '' : 's'}`; };
+    toast(`Imported: ${n('characters', 'character')}, ${n('phases', 'phase')}, ${n('locations', 'room')}.`);
   } catch (ex) { fail(ex); }
 });
 

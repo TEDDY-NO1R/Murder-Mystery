@@ -36,6 +36,9 @@
         <p class="empty" id="story-empty">No stories yet.</p>
         <hr class="rule">
         <button class="btn block" id="new-btn">New story</button>
+        <button class="btn ghost block" id="import-btn" style="margin-top:.5rem">Import JSON</button>
+        <input type="file" id="import-file" accept=".json,application/json" hidden>
+        <p class="small dim">Export a story to keep a backup off Firestore — the file holds every secret and the ending.</p>
       </div>
     </div>
 
@@ -45,7 +48,11 @@
       <div class="panel">
         <p class="panel-title">
           <span id="editing-id" class="mono"></span>
-          <button class="btn ghost sm" id="delete-story">Delete story</button>
+          <span class="title-actions">
+            <button class="btn ghost sm" id="copy-story">Copy</button>
+            <button class="btn ghost sm" id="export-story">Export JSON</button>
+            <button class="btn ghost sm" id="delete-story">Delete story</button>
+          </span>
         </p>
 
         <ul class="phases" id="tabs">

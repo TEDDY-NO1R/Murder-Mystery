@@ -12,3 +12,7 @@ admin/seed.html
 
 # Local tooling
 .claude/
+
+# Story exports from the editor hold every secret and the ending.
+# The site has no JSON files of its own, so none belong in this repo.
+*.json
