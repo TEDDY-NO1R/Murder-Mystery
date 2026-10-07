@@ -198,7 +198,7 @@ $('#host-back').addEventListener('click', () => show('join'));
 $('#host-name').addEventListener('input', syncHostOpen);
 
 function syncHostOpen() {
-  $('#host-open').disabled = !pickedStory || !$('#host-name').value.trim();
+  $('#host-open').disabled = openingRoom || !pickedStory || !$('#host-name').value.trim();
 }
 
 // Only stories the editor has published. The picker shows title,
@@ -272,9 +272,17 @@ function hostError(msg) {
   $('#host-error').hidden = false;
 }
 
+// Opening a room takes several round trips (a free code, the room,
+// clearing leftovers, your seat), so say so — and keep the button
+// locked until it is done, whatever else is tapped meanwhile.
+let openingRoom = false;
+
 $('#host-open').addEventListener('click', async () => {
+  if (openingRoom) return;
   const btn = $('#host-open');
+  openingRoom = true;
   btn.disabled = true;
+  btn.textContent = 'Opening the room…';
   $('#host-error').hidden = true;
 
   const name = $('#host-name').value.trim().slice(0, 24);
@@ -321,6 +329,8 @@ $('#host-open').addEventListener('click', async () => {
   } catch (ex) {
     hostError(ex.code ? describeError(ex) : ex.message);
   } finally {
+    openingRoom = false;
+    btn.textContent = 'Open the room';
     syncHostOpen();
   }
 });
