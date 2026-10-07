@@ -445,6 +445,17 @@ textarea { min-height: 14rem; resize: vertical; line-height: 1.7; }
 }
 .link-btn:disabled { opacity: .4; cursor: not-allowed; }
 
+/* ── Host: open a room ───────────────────────────────────── */
+
+.link-btn.back-link {
+  display: inline-block;
+  margin: 0 0 1.25rem;
+  padding: .25rem 0;
+  text-decoration: none;
+  font-size: .9375rem;
+}
+.tagline { margin-top: 0; }
+
 /* ── Story picker ────────────────────────────────────────── */
 
 .story-list { list-style: none; margin: 0; padding: 0; }
@@ -589,37 +600,76 @@ textarea { min-height: 14rem; resize: vertical; line-height: 1.7; }
 body.has-host-bar .wrap { padding-bottom: 12rem; }
 
 /* ── Desktop ─────────────────────────────────────────────────
-   Phones get the single column above. On a laptop or desktop the
-   page widens and puts the room to use: a two-column clue feed, a
-   grid of rooms, ballot choices side by side. The sticky header,
-   tabs and host bar line up with the content instead of running
-   to the screen edges. Prose (the character card) stays at a
-   comfortable reading width. */
+   Phones get the single column above. On a laptop or desktop
+   every screen spreads across the window (up to 120rem on very
+   large monitors) and splits into columns instead of leaving
+   empty margins:
+     join    — title left, join and host right
+     host    — name and Open the room in a row, stories in a grid
+     lobby   — big room code, story and host controls left; guests right
+     game    — clue feed, rooms and evidence in as many columns as fit
+     card    — the character's fields in two columns
+     vote    — suspects side by side
+     reveal  — what happened left, who was who right
+   The sticky header, tabs and host bar line up with the content. */
 
 @media (min-width: 60rem) {
   :root {
-    --wide: 72rem;
-    --mid:  46rem;
+    --pad:  3rem;
+    --wide: 120rem;
     /* Side padding that puts full-width bars' contents in line
-       with a centred --wide column. */
+       with the centred --wide column. */
     --gutter: max(var(--pad), calc((100% - var(--wide)) / 2 + var(--pad)));
   }
 
-  .wrap { max-width: var(--wide); padding-top: 3rem; }
-  .wrap.narrow { max-width: var(--mid); }
+  .wrap, .wrap.narrow { max-width: var(--wide); padding-top: 3rem; }
+  /* Things that should stay compact inside a wide page */
+  .wrap .btn { max-width: 26rem; }
 
   .bar, .tabs { padding-left: var(--gutter); padding-right: var(--gutter); }
   .tab { flex: 0 0 auto; padding-left: 1.75rem; padding-right: 1.75rem; }
 
-  /* Lobby: names in two columns */
+  /* Join: two halves, vertically centred in the window */
+  .split {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 0 6rem;
+    align-items: center; min-height: calc(100svh - 6.5rem);
+  }
+  .split .display { font-size: clamp(4rem, 7vw, 7.5rem); }
+  .split .tagline { font-size: 1.375rem; }
+  .split .split-a .rule { display: none; }
+  .split .split-b .btn { max-width: none; }
+
+  /* Host: name and Open the room side by side, stories below */
+  .host-top { display: grid; grid-template-columns: minmax(16rem, 32rem) auto; gap: 0 1rem; align-items: end; justify-content: start; }
+  .host-top .btn { margin-top: 0; padding: 1.1875rem 2.5rem; width: auto; }   /* same height as the name box */
+  .story-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr)); gap: .875rem; }
+  .story-list li { margin: 0; }
+
+  /* Lobby: info + host controls on the left, guests on the right */
+  .lobby-grid {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 6rem;
+    grid-template-areas: "info people" "host people";
+    align-content: start;
+  }
+  .lobby-info   { grid-area: info; }
+  .lobby-people { grid-area: people; }
+  .lobby-host   { grid-area: host; }
+  .lobby-info .rule { display: none; }
+  .lobby-info .code-chip {
+    display: block;
+    font-size: clamp(3rem, 5vw, 4.5rem); line-height: 1.1;
+    letter-spacing: .2em; margin: .25rem 0 1rem;
+  }
+  .lobby-people .eyebrow:first-child { margin-top: .5rem; }
+  .lobby-host .link-btn { margin-left: 0; padding-left: 0; }
   .guest-list { display: grid; grid-template-columns: 1fr 1fr; column-gap: 2.5rem; }
 
-  /* Story picker and ballot: cards side by side */
-  .story-list, .ballot { display: grid; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); gap: .875rem; }
-  .story-list li, .ballot li { margin: 0; }
+  /* Ballot: suspects side by side */
+  .ballot { display: grid; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); gap: .875rem; }
+  .ballot li { margin: 0; }
   .ballot button { height: 100%; }
 
-  /* Clue feed and your evidence: two columns of entries */
+  /* Clue feed and your evidence: as many columns as fit */
   .clue-feed, .evidence { display: grid; grid-template-columns: repeat(auto-fill, minmax(24rem, 1fr)); column-gap: 3rem; }
 
   /* Rooms to search: a grid of doors */
@@ -628,15 +678,21 @@ body.has-host-bar .wrap { padding-bottom: 12rem; }
   /* Equal-height cards, text from the top so titles in a row line up */
   .rooms button, .story-list button { height: 100%; display: flex; flex-direction: column; justify-content: flex-start; }
 
-  /* The character card reads best at book width, centred */
-  [data-screen="card"] .wrap { max-width: var(--mid); }
-  #game-card { max-width: var(--mid); margin: 0 auto; }
+  /* Character card: the fields flow into columns (up to three, each
+     kept to a comfortable line length) */
+  .card-fields { columns: 22rem 3; column-gap: 3.5rem; }
+  .card-fields .field { break-inside: avoid; margin: 0 0 1.5rem; }
+  .parchment { padding: 2.25rem 2.5rem; }
+
+  /* Reveal: story left, the cast right */
+  .reveal-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(16rem, 1fr); gap: 0 5rem; align-items: start; }
+  .reveal-side { padding-top: 5.5rem; }
 
   /* Host bar: same width as the page, buttons not stretched */
   .host-bar { padding-left: var(--gutter); padding-right: var(--gutter); }
   .host-bar > * { max-width: none; }
   .host-bar-actions .btn { flex: 0 1 16rem; }
-  .host-bar > .link-btn { margin-left: 0; }
+  .host-bar > .link-btn { margin-left: 0; padding-left: 0; }
 }
 
 [hidden] { display: none !important; }

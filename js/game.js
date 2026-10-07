@@ -649,6 +649,12 @@ function buildCard(into, { header = true } = {}) {
     into.appendChild(hr);
   }
 
+  // The fields get their own box (two columns on a desktop).
+  // Without a header, `into` is already that box.
+  const box = header
+    ? into.appendChild(Object.assign(document.createElement('div'), { className: 'card-fields' }))
+    : into;
+
   // Drive off ROLE_FIELDS rather than "render whatever arrived", so
   // the card can't grow a field just because the data did.
   const order = ROLE_FIELDS[c.role] || ROLE_FIELDS[ROLES.SUSPECT];
@@ -657,7 +663,7 @@ function buildCard(into, { header = true } = {}) {
     const value = c[key];
     if (value === undefined || value === null || value === '') return;
     if (Array.isArray(value) && !value.length) return;
-    into.appendChild(field(FIELD_LABELS[key] || key, value, PRIVATE_FIELDS.has(key)));
+    box.appendChild(field(FIELD_LABELS[key] || key, value, PRIVATE_FIELDS.has(key)));
   });
 }
 
@@ -1547,6 +1553,8 @@ function renderBallot() {
     $('#vote-status').textContent = 'Waiting for the host to deal.';
     return;
   }
+  // Clear the pre-deal message once there is someone to accuse.
+  $('#vote-status').textContent = state.vote ? 'Accusation recorded. Wait for the reveal.' : '';
 
   candidates.forEach(p => {
     const li = document.createElement('li');

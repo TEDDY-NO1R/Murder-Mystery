@@ -39,67 +39,86 @@
 <div id="app" hidden>
 
   <!-- ── 1. JOIN ──────────────────────────────────────────── -->
+  <!-- Phones: one column. Desktop: title left, join/host right. -->
   <section class="screen" data-screen="join">
-    <div class="wrap narrow">
-      <p class="eyebrow">An evening of</p>
-      <h1 class="display">Murder<br>Mystery</h1>
-      <hr class="rule">
+    <div class="wrap narrow split">
+      <div class="split-a">
+        <p class="eyebrow">An evening of</p>
+        <h1 class="display">Murder<br>Mystery</h1>
+        <p class="lede tagline">A parlour game for one room and everyone's phone.</p>
+        <hr class="rule">
+      </div>
 
-      <form id="join-form" autocomplete="off">
-        <label for="code">Room code</label>
-        <input id="code" name="code" class="code-input" type="text"
-               inputmode="latin" autocapitalize="characters" autocorrect="off"
-               spellcheck="false" maxlength="5" placeholder="•••••" required>
+      <div class="split-b">
+        <form id="join-form" autocomplete="off">
+          <label for="code">Room code</label>
+          <input id="code" name="code" class="code-input" type="text"
+                 inputmode="latin" autocapitalize="characters" autocorrect="off"
+                 spellcheck="false" maxlength="5" placeholder="•••••" required>
 
-        <label for="name">Your name</label>
-        <input id="name" name="name" type="text" maxlength="24"
-               placeholder="How you're known tonight" required>
+          <label for="name">Your name</label>
+          <input id="name" name="name" type="text" maxlength="24"
+                 placeholder="How you're known tonight" required>
 
-        <button type="submit" class="btn primary" id="join-btn">Enter</button>
-        <p class="error" id="join-error" role="alert" hidden></p>
-      </form>
+          <button type="submit" class="btn primary" id="join-btn">Enter</button>
+          <p class="error" id="join-error" role="alert" hidden></p>
+        </form>
 
-      <p class="or"><span>or</span></p>
-      <button type="button" class="btn" id="host-start">Host a game</button>
+        <p class="or"><span>or</span></p>
+        <button type="button" class="btn" id="host-start">Host a game</button>
+      </div>
     </div>
   </section>
 
-  <!-- ── 1b. HOST: CHOOSE A STORY ─────────────────────────── -->
+  <!-- ── 1b. HOST: OPEN A ROOM ────────────────────────────── -->
+  <!-- Name and the buttons first; the stories to choose from below
+       (a grid on desktop). The first story is preselected. -->
   <section class="screen" data-screen="host">
     <div class="wrap narrow">
-      <p class="eyebrow">Host a game</p>
-      <h2 class="display sm">Choose a story</h2>
-      <p class="lede">You play too. Your screen never shows who did it.</p>
-      <hr class="rule">
+      <button type="button" class="link-btn back-link" id="host-back">← Back</button>
 
+      <p class="eyebrow">Host a game</p>
+      <h2 class="display sm">Open a room</h2>
+      <p class="lede">You play too. Your screen never shows who did it.</p>
+
+      <div class="host-top">
+        <div class="host-name-field">
+          <label for="host-name">Your name</label>
+          <input id="host-name" type="text" maxlength="24" autocomplete="off"
+                 placeholder="How you're known tonight">
+        </div>
+        <button type="button" class="btn primary" id="host-open" disabled>Open the room</button>
+      </div>
+      <p class="error" id="host-error" role="alert" hidden></p>
+
+      <hr class="rule">
+      <p class="eyebrow">Choose a story</p>
       <ul class="story-list" id="story-list"></ul>
       <p class="waiting" id="story-loading"><span class="pulse"></span> Fetching the stories</p>
-
-      <label for="host-name">Your name</label>
-      <input id="host-name" type="text" maxlength="24" autocomplete="off"
-             placeholder="How you're known tonight">
-
-      <button type="button" class="btn primary" id="host-open" disabled>Open the room</button>
-      <p class="error" id="host-error" role="alert" hidden></p>
-      <button type="button" class="link-btn" id="host-back">Back</button>
     </div>
   </section>
 
   <!-- ── 2. LOBBY ─────────────────────────────────────────── -->
+  <!-- Desktop: room code and story on the left with the host's
+       controls under them, the guest list on the right. -->
   <section class="screen" data-screen="lobby">
-    <div class="wrap narrow">
-      <p class="eyebrow">Room <span id="lobby-code" class="code-chip"></span></p>
-      <h2 class="display sm" id="lobby-title">Gathering</h2>
-      <p class="lede" id="lobby-synopsis"></p>
-      <hr class="rule">
+    <div class="wrap narrow lobby-grid">
+      <div class="lobby-info">
+        <p class="eyebrow">Room <span id="lobby-code" class="code-chip"></span></p>
+        <h2 class="display sm" id="lobby-title">Gathering</h2>
+        <p class="lede" id="lobby-synopsis"></p>
+        <hr class="rule">
+      </div>
 
-      <p class="eyebrow">Present <span id="lobby-count" class="dim"></span></p>
-      <ul class="guest-list" id="lobby-players"></ul>
+      <div class="lobby-people">
+        <p class="eyebrow">Present <span id="lobby-count" class="dim"></span></p>
+        <ul class="guest-list" id="lobby-players"></ul>
 
-      <p class="waiting" id="lobby-waiting"><span class="pulse"></span> Waiting for the host to begin</p>
+        <p class="waiting" id="lobby-waiting"><span class="pulse"></span> Waiting for the host to begin</p>
+      </div>
 
       <!-- Only the player who opened the room sees this -->
-      <div id="lobby-host" hidden>
+      <div class="lobby-host" id="lobby-host" hidden>
         <p class="hint">Read the room code out. When everyone is in, start the
           game — the parts are dealt at random, and you get one too.</p>
         <button type="button" class="btn primary" id="start-btn" disabled>Start game</button>
@@ -139,7 +158,7 @@
         <h2 class="display sm" id="card-name"></h2>
         <p class="card-title" id="card-title"></p>
         <hr class="rule thin">
-        <div id="card-fields"></div>
+        <div class="card-fields" id="card-fields"></div>
       </article>
       <button class="btn primary" id="card-done">I've read it</button>
     </div>
@@ -215,16 +234,21 @@
   </section>
 
   <!-- ── 7. REVEAL ────────────────────────────────────────── -->
+  <!-- Desktop: what happened on the left, who was who on the right -->
   <section class="screen" data-screen="reveal">
-    <div class="wrap narrow">
-      <p class="eyebrow">The truth</p>
-      <h2 class="display sm" id="reveal-verdict">…</h2>
-      <hr class="rule">
+    <div class="wrap narrow reveal-grid">
+      <div class="reveal-main">
+        <p class="eyebrow">The truth</p>
+        <h2 class="display sm" id="reveal-verdict">…</h2>
+        <hr class="rule">
 
-      <article class="parchment" id="reveal-body"></article>
+        <article class="parchment" id="reveal-body"></article>
+      </div>
 
-      <p class="eyebrow">The table</p>
-      <ul class="cast-list" id="reveal-cast"></ul>
+      <div class="reveal-side">
+        <p class="eyebrow">The table</p>
+        <ul class="cast-list" id="reveal-cast"></ul>
+      </div>
     </div>
   </section>
 
