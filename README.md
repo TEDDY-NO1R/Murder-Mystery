@@ -16,8 +16,16 @@ already knows the ending.
 
 Play it at **[murder-mystery-online.netlify.app](https://murder-mystery-online.netlify.app)**.
 
-Ships with one story: *The Speckled Band*, adapted from Arthur Conan Doyle
-(public domain). Three to eight players, sixty to ninety minutes.
+Ships with five stories, all adapted from public-domain fiction, each sixty
+to ninety minutes:
+
+| Story | Source | Players |
+|---|---|---|
+| *The Speckled Band* | Arthur Conan Doyle | 3–8 |
+| *The Lupin Gambit* | Maurice Leblanc | 3–6 |
+| *The Blue Cross Betrayal* | G. K. Chesterton | 3–6 |
+| *The Moonstone Affair* | Wilkie Collins | 3–8 |
+| *Murders in the Rue Morgue* | Edgar Allan Poe | 3–7 |
 
 ---
 
@@ -79,10 +87,11 @@ an empty build command.
 Setup lives in [SETUP.md](SETUP.md) — Firebase project, security rules,
 deployment and seeding, in order.
 
-> `js/admin-seed.js` is deliberately not in this repository: the repo is
-> public and that file is the whole story, ending included. It is a one-time
-> seeding script run from `localhost`; afterwards the story lives in Firestore
-> and is edited through the story editor.
+> `js/stories/` and `js/admin-seed.js` are deliberately not in this
+> repository: the repo is public and those files are the whole stories,
+> endings included. They are loaded once by `admin/seed.html` from
+> `localhost`; afterwards the stories live in Firestore and are edited
+> through the story editor.
 
 ## Licence
 

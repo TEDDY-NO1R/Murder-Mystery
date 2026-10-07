@@ -28,9 +28,10 @@ Read `README.md` for the game, `SETUP.md` for setup and deployment.
 |---|---|
 | Deployed to Netlify from `main` | done |
 | Firestore rules ("anyone can host") published | done, 6 Oct 2026 |
-| *The Speckled Band* (`the-speckled-band`) seeded and published | done, 6 Oct 2026 |
+| *The Speckled Band* (`the-speckled-band`) seeded and published | done, 6 Oct 2026 — **but without rooms**: a cached old seed page was used. Re-seed. |
 | Live 3-player test (host + 2 players joined) | done, 6 Oct 2026 |
-| Old pre-2026 stories in Firestore | being deleted by the owner via the story editor |
+| Old stories converted to murders (Lupin, Blue Cross, Moonstone, Rue Morgue) | written 7 Oct 2026 in `js/stories/`, same ids as the old documents; to be seeded |
+| Old "Death at Stoke Moran" (`speckled-band`) | duplicate of The Speckled Band; the seed page offers to delete it |
 | Editor **Rooms** tab (`edb4310`) | deployed 6 Oct 2026 — tested on a mock only |
 | Table alerts, round timer, screen awake (`0c8a78d`) | deployed 6 Oct 2026 — tested on a mock only |
 | Editor copy / export / import JSON (`0fb8591`) | deployed 6 Oct 2026 — tested on a mock only |
@@ -131,16 +132,28 @@ What the rules do enforce:
 
 ## The story seed files — not in git
 
-`js/admin-seed.js` (the whole story, ending included) and `admin/seed.html`
-(the one-time loader) are **gitignored** and **404'd on Netlify**. They
-exist only on the owner's PC. The story itself lives in Firestore and is
-edited through `admin/story.html` — which displays every secret, so whoever
-wants to play a story should not open it there.
+`js/stories/*.js` (one file per story, ending included), `js/admin-seed.js`
+(the list of them, plus retired old ids) and `admin/seed.html` (the
+loader) are **gitignored** and **404'd on Netlify**. They exist only on the
+owner's PC. The stories themselves live in Firestore and are edited through
+`admin/story.html` — which displays every secret, so whoever wants to play
+a story should not open it there.
 
-To seed again: serve this folder on `http://localhost:8767` (no Python or
-Node on the owner's PC — a small PowerShell `HttpListener` script works),
-open `/admin/seed.html`, sign in as the editor, click Seed. It shows counts
-only.
+Five stories, Oct 2026: *The Speckled Band* (written fresh), and four
+older theft/murder stories rewritten as murders with a culprit among the
+players — *The Lupin Gambit* (`arrest-of-lupin`), *The Blue Cross
+Betrayal* (`blue-cross-betrayal`), *The Moonstone Affair*
+(`moonstone-manor`), *Murders in the Rue Morgue* (`rue-morgue`). Each has a
+solution, ~11 phase clues and 7 rooms × 3 finds, and keeps optional
+characters (witness, accomplice, later suspects) out of what the clues
+depend on.
+
+To seed: serve this folder from localhost **with `Cache-Control:
+no-store`** (no Python or Node on the owner's PC — a small PowerShell
+`HttpListener` script works; a browser once reused a cached old seed page
+and wrote a story without rooms), open `/admin/seed.html`, sign in as the
+editor, tick stories, write. It validates each story and shows titles and
+counts only.
 
 **Backups and copies** (story editor, Oct 2026): **Export JSON** downloads
 a story with all its characters, phases and rooms as one file
@@ -225,10 +238,10 @@ refuses to deal otherwise.
   host, mock `mock-game-init.js` + `seed-game.js`). Regenerate a test page
   after changing its real page. `.claude/` is gitignored, so these exist
   on this PC only.
-- **The seed files are per-machine.** `js/admin-seed.js` is gitignored, so
-  pulling does not update it. Copy the current one across by hand before
-  seeding from another PC — an old copy lacks `locations` and the
-  `the-speckled-band` id.
+- **The seed files are per-machine.** `js/stories/`, `js/admin-seed.js` and
+  `admin/seed.html` are gitignored, so pulling does not update them. Copy
+  them across by hand before seeding from another PC — an old copy has
+  only The Speckled Band, possibly without rooms.
 - **Rules** are published by pasting `firestore.rules` into Firebase
   Console → Firestore → Rules → Publish.
 - **No Node or Python.** Headless Edge

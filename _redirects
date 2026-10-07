@@ -2,10 +2,11 @@
 # The ! forces the rule even though a real file exists at that path
 # (without it, Netlify serves the static file and ignores the rule).
 #
-# js/admin-seed.js holds every secret in The Speckled Band, including
-# the solution. Firestore rules cannot protect a static file — only
-# not serving it can.
+# js/stories/ and js/admin-seed.js hold every story, solutions
+# included. Firestore rules cannot protect a static file — only not
+# serving it can.
 /js/admin-seed.js   /404.html   404!
+/js/stories/*       /404.html   404!
 /admin/seed.html    /404.html   404!
 
 # No reason to serve these either.

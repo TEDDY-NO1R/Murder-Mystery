@@ -18,7 +18,7 @@ Native mode. All of this is done:
 | 4. Story-editor account | `hasthimunisilva@icloud.com`, UID `B8CkPp6XqTcHfvOcZHE8ghqNahI3` |
 | 5. Web app registered | "Murder Mystery Web"; config is in `js/firebase-init.js` |
 | 6. Rules | `firestore.rules` published 6 Oct 2026 |
-| 7. Story seeded | *The Speckled Band* (`the-speckled-band`), published |
+| 7. Stories seeded | Five stories in `js/stories/`; load or reload them with `admin/seed.html` (section 7) |
 | 8. Deployed | Netlify, from GitHub `main` |
 
 The sections below are how to redo any step.
@@ -84,25 +84,29 @@ import the GitHub repo (redeploys on every push to `main`).
 `_redirects` serves the game at `/`, sends the old `/host.html` to `/`, and
 404s the seed files and `firestore.rules`.
 
-## 7. Seed a story
+## 7. Seed the stories
 
-**Seed from localhost, not from the deployed site.** `js/admin-seed.js`
-holds the whole story, ending included. It is gitignored (the repo is
-public) and `_redirects` 404s it on Netlify.
+**Seed from localhost, not from the deployed site.** Each file in
+`js/stories/` is one whole story, ending included; `js/admin-seed.js` lists
+them. All of it is gitignored (the repo is public) and `_redirects` 404s it
+on Netlify.
 
-1. Serve this folder on `http://localhost:8767` with any static web server
-   (e.g. `python -m http.server 8767` if Python is installed; on this PC a
-   small PowerShell `HttpListener` script was used).
-2. Open `http://localhost:8767/admin/seed.html` and sign in as the story
-   editor.
-3. Click **Seed "The Speckled Band"**. The page shows counts only, never
-   story text, so whoever seeds can still play.
+1. Serve this folder from `http://localhost:<port>` with any static web
+   server that sends `Cache-Control: no-store` (on this PC a small
+   PowerShell `HttpListener` script is used). A browser that cached an
+   older seed page will silently load old story data — if in doubt, use a
+   port you haven't used before.
+2. Open `/admin/seed.html` and sign in as the story editor.
+3. It lists every story by title with its counts, checks each for problems
+   (one killer, one detective, every table size seatable, unique ids), and
+   offers to delete retired old versions. Tick what you want and click
+   **Write the ticked stories**. It never shows story text, so whoever
+   seeds can still play.
 
-It writes the story (id `the-speckled-band`) with its characters, clues
-and searchable rooms. Running it again replaces the story and discards any
-edits made in the story editor. Rooms can't yet be edited in the editor —
-change them in the seed file and seed again. Opening a story in `admin/story.html` shows every
-secret; don't, if you want to play it.
+Writing a story replaces whatever is stored under its id — including an
+old-format document — and discards any edits made in the story editor.
+Opening a story in `admin/story.html` shows every secret; don't, if you
+want to play it.
 
 New stories can also be written directly in `admin/story.html`. Only
 stories with status **published** appear in the host's list.
@@ -191,7 +195,8 @@ css/admin.css        editor styling
 js/firebase-init.js  Firebase config, game constants, path helpers
 js/game.js           player and host logic, realtime listeners
 js/admin.js          story create/edit
-js/admin-seed.js     The Speckled Band story data (not in git, not deployed)
+js/admin-seed.js     list of the stories the seed page loads (not in git, not deployed)
+js/stories/*.js      one file per story, ending included (not in git, not deployed)
 firestore.rules      paste into the console (section 5)
 _redirects           Netlify routing and blocked paths
 ```
