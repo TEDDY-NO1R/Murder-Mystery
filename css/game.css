@@ -588,4 +588,55 @@ textarea { min-height: 14rem; resize: vertical; line-height: 1.7; }
 /* Keep the end of every screen clear of the fixed host bar */
 body.has-host-bar .wrap { padding-bottom: 12rem; }
 
+/* ── Desktop ─────────────────────────────────────────────────
+   Phones get the single column above. On a laptop or desktop the
+   page widens and puts the room to use: a two-column clue feed, a
+   grid of rooms, ballot choices side by side. The sticky header,
+   tabs and host bar line up with the content instead of running
+   to the screen edges. Prose (the character card) stays at a
+   comfortable reading width. */
+
+@media (min-width: 60rem) {
+  :root {
+    --wide: 72rem;
+    --mid:  46rem;
+    /* Side padding that puts full-width bars' contents in line
+       with a centred --wide column. */
+    --gutter: max(var(--pad), calc((100% - var(--wide)) / 2 + var(--pad)));
+  }
+
+  .wrap { max-width: var(--wide); padding-top: 3rem; }
+  .wrap.narrow { max-width: var(--mid); }
+
+  .bar, .tabs { padding-left: var(--gutter); padding-right: var(--gutter); }
+  .tab { flex: 0 0 auto; padding-left: 1.75rem; padding-right: 1.75rem; }
+
+  /* Lobby: names in two columns */
+  .guest-list { display: grid; grid-template-columns: 1fr 1fr; column-gap: 2.5rem; }
+
+  /* Story picker and ballot: cards side by side */
+  .story-list, .ballot { display: grid; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); gap: .875rem; }
+  .story-list li, .ballot li { margin: 0; }
+  .ballot button { height: 100%; }
+
+  /* Clue feed and your evidence: two columns of entries */
+  .clue-feed, .evidence { display: grid; grid-template-columns: repeat(auto-fill, minmax(24rem, 1fr)); column-gap: 3rem; }
+
+  /* Rooms to search: a grid of doors */
+  .rooms { display: grid; grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr)); gap: .875rem; }
+  .rooms li { margin: 0; }
+  /* Equal-height cards, text from the top so titles in a row line up */
+  .rooms button, .story-list button { height: 100%; display: flex; flex-direction: column; justify-content: flex-start; }
+
+  /* The character card reads best at book width, centred */
+  [data-screen="card"] .wrap { max-width: var(--mid); }
+  #game-card { max-width: var(--mid); margin: 0 auto; }
+
+  /* Host bar: same width as the page, buttons not stretched */
+  .host-bar { padding-left: var(--gutter); padding-right: var(--gutter); }
+  .host-bar > * { max-width: none; }
+  .host-bar-actions .btn { flex: 0 1 16rem; }
+  .host-bar > .link-btn { margin-left: 0; }
+}
+
 [hidden] { display: none !important; }
