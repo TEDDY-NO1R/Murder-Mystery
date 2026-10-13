@@ -565,6 +565,71 @@ textarea { min-height: 14rem; resize: vertical; line-height: 1.7; }
 
 .bar-chips { display: flex; flex-direction: column; align-items: flex-end; gap: .375rem; }
 .chip.quiet { color: var(--smoke); font-size: .75rem; padding: .375rem .625rem; }
+.chip-row { display: flex; gap: .375rem; }
+
+/* Role tip under the character card */
+.role-tip {
+  margin: 1.25rem 0 0;
+  padding: .875rem 1rem;
+  border-left: 3px solid var(--gold);
+  background: rgba(200,168,75,.08);
+  font-size: .9375rem;
+}
+.parchment .role-tip { background: rgba(43,32,22,.06); border-left-color: var(--blood); color: var(--ink); }
+.role-tip b { font-family: var(--display); }
+
+/* ── Guided tips ─────────────────────────────────────────── */
+/* A bubble beside the real control, which glows. No backdrop:
+   everything stays tappable. */
+
+.link-btn.inline { display: inline; margin: 0; padding: 0; font-size: inherit; font-style: normal; }
+
+.tip {
+  position: fixed; z-index: 40;
+  width: min(19rem, calc(100vw - 1.5rem));
+  padding: .875rem 1rem .75rem;
+  background: var(--parchment);
+  color: var(--ink);
+  border-radius: 6px;
+  box-shadow: 0 14px 38px rgba(0,0,0,.6);
+  font: 400 1rem/1.45 var(--serif);
+  animation: tip-in .25s ease-out;
+}
+@keyframes tip-in { from { opacity: 0; transform: translateY(var(--tip-from, 6px)); } }
+.tip-text { margin: 0 0 .625rem; }
+.tip-text b { font-weight: 700; }
+.tip-foot { display: flex; align-items: center; gap: .75rem; }
+.tip-count { margin-left: auto; font-size: .75rem; letter-spacing: .1em; color: #8a7a5c; }
+.tip-skip, .tip-next {
+  background: none; border: 0; cursor: pointer;
+  font: 600 .875rem/1 var(--serif); padding: .5rem 0;
+}
+.tip-skip { color: #8a7a5c; text-decoration: underline; text-underline-offset: 3px; }
+.tip-next {
+  padding: .5rem .875rem; border-radius: 100px;
+  background: var(--ink); color: var(--parchment);
+}
+.tip-arrow {
+  position: absolute; width: 14px; height: 14px;
+  background: var(--parchment);
+  transform: rotate(45deg);
+}
+.tip[data-side="below"] .tip-arrow { top: -7px; }
+.tip[data-side="above"] .tip-arrow { bottom: -7px; }
+
+/* The control the tip is about */
+.tip-target {
+  outline: 2px solid var(--gold);
+  outline-offset: 4px;
+  border-radius: var(--radius);
+  animation: tip-glow 1.6s ease-in-out infinite;
+}
+@keyframes tip-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(200,168,75,.0); }
+  50%      { box-shadow: 0 0 0 8px rgba(200,168,75,.22); }
+}
+
+@media (prefers-reduced-motion: reduce) { .tip, .tip-target { animation: none; } }
 
 .round-timer {
   margin: .25rem 0 0;

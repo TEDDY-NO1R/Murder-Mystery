@@ -48,6 +48,12 @@ optional round countdown that every phone shows; it alerts the table when
 it runs out but moves nothing on. Phones chime and buzz when a clue lands,
 the phase changes or someone shows evidence.
 
+**Learning as you go.** The first time a phone reaches each screen, a small
+bubble points at the button to press — the room code box, the envelope,
+the Clues tab, the ballot — and explains it in a line. "Show me how" or
+**Tips** replays them. Each character card ends with a tip on how to play
+that role.
+
 **Search the house.** In arrival, investigation and confrontation, every
 player searches one room of the house per round. What you find is yours
 alone — show it to the table, keep it quiet, or lie about it. Whoever

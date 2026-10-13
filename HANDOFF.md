@@ -91,6 +91,22 @@ browser, but none has touched the real database or real phones yet:
    phone shows; it only alerts — phases still advance by hand — and is
    cleared on each phase change. Phones ask to keep the screen awake
    during a game (Wake Lock API, where supported).
+7. **Guided tips** (added 13 Oct 2026 — players didn't know how to play;
+   the owner wanted it to show where to tap, not pages of text or
+   full-screen pop-ups). The first time a phone reaches each screen, a
+   small bubble points at the real control ("Type the 5-letter room code
+   the host reads out") and that control glows. No backdrop — the page
+   stays usable. Tours per screen in `TOURS` in `js/game.js`: join, host
+   (waits for the story list), lobby, envelope, card, game, search (on
+   first opening the Search tab), vote. Steps whose element is hidden
+   are skipped, so hosts get the host-bar tips and guests don't; the
+   vote tip tells the Detective their accusation decides the game.
+   Seen-state per screen in `localStorage` (`mm:tips:<screen>`, set when
+   shown); **Skip tips** sets `mm:tips-off`. `[data-tour]` buttons
+   ("Show me how" on home, host and lobby; **Tips** in the game header)
+   replay the current screen. Each character card also ends with a
+   "Playing this part" line for its role (`ROLE_TIPS`). If the rules
+   change — e.g. who wins — update the tips with them.
 
 Everything is in `js/game.js`; the page is `play.html` (served at `/`).
 

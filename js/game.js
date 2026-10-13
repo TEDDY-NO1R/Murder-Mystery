@@ -96,6 +96,13 @@ function show(name) {
   $$('#app .screen').forEach(s => s.classList.toggle('is-on', s.dataset.screen === name));
   $('#app').hidden = (name === 'boot');
   window.scrollTo(0, 0);
+
+  // First visit to this screen: point out what to press, once the
+  // screen has drawn (and the snapshot that brought us here has
+  // filled it in).
+  // (The host screen starts its own, once its stories have loaded.)
+  endTour();
+  if (name !== 'host') setTimeout(() => { if (state.screen === name) startTour(name); }, 450);
 }
 
 function boot(msg) {
@@ -220,6 +227,9 @@ async function loadStories() {
   $('#story-loading').hidden = true;
   if (!state.stories.some(s => s.id === pickedStory)) pickedStory = state.stories[0]?.id || null;
   renderStories();
+  // The host screen's tips wait for the list, so "pick a story" has
+  // something to point at.
+  if (state.screen === 'host' && !tour.name) startTour('host');
 }
 
 function renderStories() {
@@ -665,7 +675,25 @@ function buildCard(into, { header = true } = {}) {
     if (Array.isArray(value) && !value.length) return;
     box.appendChild(field(FIELD_LABELS[key] || key, value, PRIVATE_FIELDS.has(key)));
   });
+
+  // How to play this part — the rules of the role, not the story.
+  if (ROLE_TIPS[c.role]) {
+    const tip = document.createElement('p');
+    tip.className = 'role-tip';
+    const b = document.createElement('b');
+    b.textContent = 'Playing this part: ';
+    tip.append(b, ROLE_TIPS[c.role]);
+    into.appendChild(tip);
+  }
 }
+
+const ROLE_TIPS = {
+  KILLER:     'Nobody else\'s screen says you did it. Keep your story straight and steer the Detective towards someone else — their accusation is the only one that counts.',
+  DETECTIVE:  'Only your accusation decides the game. Question everyone, follow the clues, search the house, and name the killer at the Accusation.',
+  ACCOMPLICE: 'You are on the killer\'s side. Protect them without looking as if you are — if the Detective names them, you lose with them.',
+  WITNESS:    'You saw something that matters. Choose when and how to share it — the killer would rather it stayed unsaid.',
+  SUSPECT:    'You didn\'t do it, but your secret could make it look as if you did. Help the Detective without giving yourself away.'
+};
 
 function renderCard() {
   if (!state.card) return;
@@ -1524,8 +1552,187 @@ $$('.tab').forEach(tab => {
   tab.addEventListener('click', () => {
     $$('.tab').forEach(t => t.classList.toggle('is-on', t === tab));
     $$('.tab-panel').forEach(p => p.classList.toggle('is-on', p.dataset.panel === tab.dataset.tab));
+    if (tab.dataset.tab === 'search') startTour('search');
   });
 });
+
+// ------------------------------------------------------------
+//  Guided tips
+//
+//  The first time a phone reaches each screen, a bubble points at
+//  the real control to use ("Type the room code here") and that
+//  control glows. Nothing is covered — tap the control itself and
+//  the game carries on. [data-tour] buttons replay the current
+//  screen's tips. Rules of the game only, never story text.
+// ------------------------------------------------------------
+
+const TIPS_OFF = 'mm:tips-off';
+const tipSeenKey = name => `mm:tips:${name}`;
+
+// Each step: the element to point at, and what to say. A step whose
+// element is missing or hidden is skipped, so one list serves the
+// host and the guests.
+const TOURS = {
+  join: [
+    { at: '#code',       say: 'Type the <b>5-letter room code</b> the host reads out.' },
+    { at: '#name',       say: 'Then <b>your name</b> — your character comes later.' },
+    { at: '#join-btn',   say: 'Tap <b>Enter</b> to join the table.' },
+    { at: '#host-start', say: 'Or run the evening yourself: <b>host a game</b>. The host plays too.' }
+  ],
+  host: [
+    { at: '#host-name',  say: 'Your name, as the others will see it.' },
+    { at: '#story-list li', say: '<b>Tap a story</b> to pick it for tonight. Each says how many players it needs.' },
+    { at: '#host-open',  say: 'Then <b>open the room</b>. You get a code to read out.' }
+  ],
+  lobby: [
+    { at: '#lobby-code',    say: () => state.isHost
+        ? '<b>Read this code out loud</b> so everyone can join.'
+        : 'Your room code. Anyone still joining needs it.' },
+    { at: '#lobby-players', say: () => state.isHost
+        ? 'Players appear here as they join. <b>Remove</b> turns someone away.'
+        : 'Everyone who has joined so far.' },
+    { at: '#start-btn',     say: '<b>Start</b> once 3–8 people are in. Parts are dealt at random — you get one too.' },
+    { at: '#lobby-waiting', say: 'Sit tight. When the host starts, a <b>sealed envelope</b> arrives on your phone.' }
+  ],
+  envelope: [
+    { at: '#envelope', say: 'Your part has arrived. Make sure <b>nobody can see your screen</b>, then tap to open it.' }
+  ],
+  card: [
+    { at: '#card-role', say: 'Your <b>role</b>. Keep it to yourself.' },
+    { at: '#card-fields .field.is-private', say: '<b>Only you</b> can see this. Say what you like about it — truth or lies.' },
+    { at: '#card-fields .role-tip', say: 'How to play your part.' },
+    { at: '#card-done', say: 'Tap when you\'ve read it. Your card stays one tap away all evening.' }
+  ],
+  game: [
+    { at: '#game-phase', say: 'The <b>current round</b>. The host moves the evening on.' },
+    { at: '.tab[data-tab="clues"]', say: '<b>Clues</b> land here for everyone at once. Your phone chimes.' },
+    { at: '#search-tab', say: '<b>Search the house</b>: one room per round. First come, first served.' },
+    { at: '.tab[data-tab="you"]', say: 'Your <b>card</b>, whenever you need it.' },
+    { at: '.tab[data-tab="notes"]', say: 'Private <b>notes</b>, kept on this phone only.' },
+    { at: '#hb-clue', say: 'You\'re hosting. <b>Release a clue</b> when the talk slows — you read it at the same moment as everyone.' },
+    { at: '#hb-next', say: '<b>Next round</b> when the table is ready. Nothing moves on by itself.' },
+    { at: '#hb-timer', say: 'Optional: a <b>countdown</b> on every phone.' },
+    { at: '.bar [data-tour]', say: 'Tap <b>Tips</b> to see these again.' }
+  ],
+  search: [
+    { at: '#rooms', say: '<b>Tap a room</b> to search it. Whoever gets there first takes what\'s hidden — and everyone sees who searched where.' },
+    { at: '.evidence-head', say: 'What you find lands here, <b>private</b>. Show it to the table, keep it, or lie about it.' }
+  ],
+  vote: [
+    { at: '#ballot', say: () => state.card?.role === ROLES.DETECTIVE
+        ? '<b>Tap who did it.</b> You are the Detective — <b>your accusation decides the game.</b>'
+        : '<b>Tap who you think did it.</b> Everyone accuses, but only the <b>Detective\'s</b> accusation decides who wins.' },
+    { at: '#vote-btn', say: 'Then <b>cast it</b>. It can\'t be changed afterwards.' }
+  ]
+};
+
+const tour = { name: null, steps: [], at: 0, target: null };
+
+const tipsOff = () => { try { return !!localStorage.getItem(TIPS_OFF); } catch { return false; } };
+
+function visible(el) {
+  if (!el || el.closest('[hidden]')) return false;
+  const r = el.getBoundingClientRect();
+  return r.width > 0 && r.height > 0;
+}
+
+function startTour(name, { replay = false } = {}) {
+  endTour();
+  const steps = TOURS[name];
+  if (!steps) return;
+  if (!replay) {
+    if (tipsOff()) return;
+    try {
+      if (localStorage.getItem(tipSeenKey(name))) return;
+      localStorage.setItem(tipSeenKey(name), '1');   // shown once is seen
+    } catch { /* private mode: show every time */ }
+  }
+  tour.steps = steps.filter(s => visible($(s.at)));
+  if (!tour.steps.length) return;
+  tour.name = name;
+  tour.at = 0;
+  drawTip();
+}
+
+function endTour() {
+  tour.target?.classList.remove('tip-target');
+  tour.target = null;
+  tour.name = null;
+  $('#tip').hidden = true;
+}
+
+function drawTip() {
+  const step = tour.steps[tour.at];
+  const el = step && $(step.at);
+  if (!el || !visible(el)) {           // gone since the tour began
+    if (tour.at < tour.steps.length - 1) { tour.at++; drawTip(); } else endTour();
+    return;
+  }
+  tour.target?.classList.remove('tip-target');
+  tour.target = el;
+  el.classList.add('tip-target');
+
+  // Tip text is ours (fixed strings above), never story data.
+  $('#tip-text').innerHTML = typeof step.say === 'function' ? step.say() : step.say;
+  const last = tour.at === tour.steps.length - 1;
+  $('#tip-next').textContent = last ? 'Got it' : 'Next';
+  $('#tip-count').textContent = tour.steps.length > 1 ? `${tour.at + 1} / ${tour.steps.length}` : '';
+  $('#tip-skip').hidden = last;
+
+  const tip = $('#tip');
+  tip.hidden = false;
+  tip.style.animation = 'none'; void tip.offsetWidth; tip.style.animation = '';
+  // A tall target (a long list) is shown from its top, so the
+  // bubble has room beneath what it points at.
+  const tall = el.getBoundingClientRect().height > window.innerHeight * 0.45;
+  el.scrollIntoView({ block: tall ? 'start' : 'center', behavior: 'instant' });
+  placeTip();
+}
+
+// Below the target if it fits, otherwise above; kept inside the
+// screen, with the arrow pointing at the target's middle.
+function placeTip() {
+  const el = tour.target;
+  const tip = $('#tip');
+  if (!el || tip.hidden) return;
+  const r = el.getBoundingClientRect();
+  const gap = 14, edge = 12;
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  const vw = document.documentElement.clientWidth, vh = window.innerHeight;
+
+  // A target taller than the room left on screen: sit the bubble
+  // inside its top edge rather than off the bottom of the screen.
+  const fitsBelow = r.bottom + gap + h <= vh - edge;
+  const fitsAbove = r.top - gap - h >= edge;
+  const below = fitsBelow || !fitsAbove;
+  const top = fitsBelow ? r.bottom + gap
+    : fitsAbove ? r.top - gap - h
+    : Math.min(Math.max(r.top + gap * 3, edge), vh - h - edge);
+  const mid = r.left + r.width / 2;
+  const left = Math.min(Math.max(mid - w / 2, edge), vw - w - edge);
+
+  tip.dataset.side = below ? 'below' : 'above';
+  tip.style.setProperty('--tip-from', below ? '6px' : '-6px');
+  tip.style.top = `${Math.round(top)}px`;
+  tip.style.left = `${Math.round(left)}px`;
+  $('#tip-arrow').style.left = `${Math.round(Math.min(Math.max(mid - left - 7, 14), w - 28))}px`;
+}
+
+$('#tip-next').addEventListener('click', () => {
+  if (tour.at < tour.steps.length - 1) { tour.at++; drawTip(); } else endTour();
+});
+$('#tip-skip').addEventListener('click', () => {
+  try { localStorage.setItem(TIPS_OFF, '1'); } catch { /* private mode */ }
+  endTour();
+});
+window.addEventListener('resize', placeTip);
+window.addEventListener('scroll', placeTip, { passive: true });
+
+// "Show me how" / Tips: replay this screen's tips, even after a skip.
+$$('[data-tour]').forEach(b => b.addEventListener('click', () => {
+  try { localStorage.removeItem(TIPS_OFF); } catch { /* private mode */ }
+  startTour(state.screen, { replay: true });
+}));
 
 $('#game-whoami').addEventListener('click', () => {
   document.querySelector('.tab[data-tab="you"]').click();

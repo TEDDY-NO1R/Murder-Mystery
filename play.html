@@ -66,6 +66,7 @@
 
         <p class="or"><span>or</span></p>
         <button type="button" class="btn" id="host-start">Host a game</button>
+        <button type="button" class="link-btn" data-tour>New here? Show me how</button>
       </div>
     </div>
   </section>
@@ -79,7 +80,8 @@
 
       <p class="eyebrow">Host a game</p>
       <h2 class="display sm">Open a room</h2>
-      <p class="lede">You play too. Your screen never shows who did it.</p>
+      <p class="lede">You play too. Your screen never shows who did it.
+        <button type="button" class="link-btn inline" data-tour>Show me how</button></p>
 
       <div class="host-top">
         <div class="host-name-field">
@@ -115,6 +117,7 @@
         <ul class="guest-list" id="lobby-players"></ul>
 
         <p class="waiting" id="lobby-waiting"><span class="pulse"></span> Waiting for the host to begin</p>
+        <button type="button" class="link-btn" data-tour>Show me how this works</button>
       </div>
 
       <!-- Only the player who opened the room sees this -->
@@ -174,7 +177,10 @@
       </div>
       <div class="bar-chips">
         <button class="chip" id="game-whoami"></button>
-        <button class="chip quiet" data-sound aria-pressed="true">Sound on</button>
+        <div class="chip-row">
+          <button class="chip quiet" data-tour aria-label="Show the tips for this screen again">Tips</button>
+          <button class="chip quiet" data-sound aria-pressed="true">Sound on</button>
+        </div>
       </div>
     </header>
 
@@ -274,6 +280,19 @@
     <button type="button" class="link-btn" id="hb-close">Close room</button>
   </div>
 
+</div>
+
+<!-- Guided tips: a bubble that points at the real button to press,
+     shown the first time each screen appears. The page stays usable
+     around it. Rules of the game only, never story text. -->
+<div class="tip" id="tip" role="dialog" aria-live="polite" hidden>
+  <p class="tip-text" id="tip-text"></p>
+  <div class="tip-foot">
+    <button type="button" class="tip-skip" id="tip-skip">Skip tips</button>
+    <span class="tip-count" id="tip-count"></span>
+    <button type="button" class="tip-next" id="tip-next">Next</button>
+  </div>
+  <span class="tip-arrow" id="tip-arrow" aria-hidden="true"></span>
 </div>
 
 <!-- Table alerts: a new clue, a new phase, evidence shown, time up.
